@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Athar's Shelf — Web inspiration, selected</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="reading-line"></div>
+  <header>
+    <a class="logo" href="#top">A<span>.</span></a>
+    <nav>
+      <a href="#top">Discover</a>
+      <a href="#creator">About Athar</a>
+      <a href="#contact">Say hello</a>
+    </nav>
+    <div class="header-right">
+      <a class="athar-link" href="https://athariqbal.com" target="_blank" rel="noopener">athariqbal.com ↗</a>
+      <button class="avatar" id="loginBtn" aria-label="Open owner login">AI</button>
+      <button class="submit-site" id="jumpContact">Submit a website</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="intro">
+      <div>
+        <p class="eyebrow">ATHAR'S SHELF / 2026</p>
+        <h1>Good websites,<br>worth <em>keeping.</em></h1>
+        <p class="intro-copy">A personal collection of digital work, thoughtful studios and clever corners of the internet — curated by Athar Iqbal.</p>
+      </div>
+      <a class="intro-link" href="#creator"><span>Meet the<br>curator</span><b>↓</b></a>
+    </section>
+
+    <section class="toolbar">
+      <div class="search">
+        <span>⌕</span>
+        <input id="search" placeholder="Search Athar's shelf" autocomplete="off">
+        <kbd>⌘ K</kbd>
+      </div>
+      <div class="chips" id="filters">
+        <button class="active" data-filter="all">All websites <b id="siteCount">06</b></button>
+        <button data-filter="studio">Studios</button>
+        <button data-filter="portfolio">Portfolio</button>
+        <button data-filter="culture">Culture</button>
+        <button data-filter="shop">Shops</button>
+      </div>
+      <button class="sort" id="sortBtn">Newest <span>⌄</span></button>
+    </section>
+
+    <section class="gallery">
+      <div class="gallery-meta">
+        <span id="resultCount">06 results</span>
+        <span>Hover to preview ↗</span>
+      </div>
+      <div class="site-grid" id="siteGrid"></div>
+    </section>
+
+    <section class="creator" id="creator">
+      <div class="creator-image"><span>AI</span><i>✦</i></div>
+      <div class="creator-copy">
+        <p class="eyebrow">THE PERSON BEHIND THE SHELF</p>
+        <h2>Hello, I’m Athar.</h2>
+        <p>I’m a designer and web creator with an obsession for useful, expressive digital experiences. This is where I save work that makes me stop scrolling.</p>
+        <a href="https://athariqbal.com" target="_blank" rel="noopener">Visit athariqbal.com <b>↗</b></a>
+      </div>
+      <p class="creator-note">A COLLECTION<br>WITH A POINT<br>OF VIEW.</p>
+    </section>
+
+    <section class="contact" id="contact">
+      <div>
+        <p class="eyebrow">HAVE A FIND TO SHARE?</p>
+        <h2>Send it<br>my way.</h2>
+      </div>
+      <form id="contactForm">
+        <input required name="name" placeholder="Your name">
+        <input required name="email" type="email" placeholder="Email address">
+        <textarea required name="message" placeholder="Tell me about the website or idea..." rows="3"></textarea>
+        <button type="submit">Send message <span>↗</span></button>
+        <p class="form-status" id="formStatus"></p>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <a class="logo" href="#top">A<span>.</span></a>
+    <p>Curated &amp; built by Athar Iqbal</p>
+    <a href="#top">Back to top ↑</a>
+  </footer>
+
+  <div class="modal" id="loginModal">
+    <div class="modal-card">
+      <button class="close" data-close type="button">×</button>
+      <p class="eyebrow">OWNER ACCESS</p>
+      <h2>Welcome, Athar.</h2>
+      <form id="loginForm">
+        <input name="email" type="email" required placeholder="Email address" autocomplete="username">
+        <input name="password" type="password" required placeholder="Password" autocomplete="current-password">
+        <button type="submit">Enter dashboard <span>↗</span></button>
+      </form>
+      <small id="loginNote">Owner access only.</small>
+    </div>
+  </div>
+
+  <section class="dashboard" id="dashboard">
+    <aside>
+      <a class="logo" href="#top">A<span>.</span></a>
+      <p class="eyebrow">ATHAR'S SHELF</p>
+      <button class="dash-link active" data-panel="add">Add website</button>
+      <button class="dash-link" data-panel="manage">Collection <b id="manageCount"></b></button>
+      <button class="dash-link" data-panel="inbox">Messages <b id="messageCount"></b></button>
+      <button id="signout" type="button">Sign out ↗</button>
+    </aside>
+    <div class="dash-main">
+      <button id="dashClose" type="button">Close ×</button>
+      <div id="add" class="panel active editor-panel">
+        <p class="eyebrow">NEW DISCOVERY</p>
+        <h2>Add a website.</h2>
+        <form id="addSiteForm">
+          <label>Website name<input name="title" required placeholder="e.g. Studio Koto"></label>
+          <label>Website URL<input name="url" type="url" required placeholder="https://"></label>
+          <label>Category
+            <select name="category">
+              <option value="studio">Studio</option>
+              <option value="portfolio">Portfolio</option>
+              <option value="culture">Culture</option>
+              <option value="shop">Shop</option>
+            </select>
+          </label>
+          <label>Why it belongs here<textarea name="description" required rows="3" placeholder="A short, honest description"></textarea></label>
+          <label>Cover image URL <small>(optional)</small><input name="image" type="url" placeholder="https://images..."></label>
+          <label>Gallery image URLs <small>(one URL per line)</small><textarea name="gallery" rows="4" placeholder="https://image-one...&#10;https://image-two..."></textarea></label>
+          <fieldset class="appearance-controls">
+            <legend>Card appearance</legend>
+            <div class="colour-controls">
+              <label>Surface<input name="cardBg" type="color" value="#ffffff"></label>
+              <label>Title<input name="titleColor" type="color" value="#202020"></label>
+              <label>Body<input name="bodyColor" type="color" value="#696969"></label>
+              <label>Accent<input name="accentColor" type="color" value="#ff7556"></label>
+            </div>
+            <div class="layout-controls">
+              <label>Image alignment
+                <select name="imagePosition">
+                  <option value="center">Centre</option>
+                  <option value="top">Top</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="left">Left</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+              <label>Text alignment
+                <select name="textAlign">
+                  <option value="left">Left</option>
+                  <option value="center">Centre</option>
+                  <option value="right">Right</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+          <button type="submit">Publish to shelf <span>↗</span></button>
+          <p class="form-status" id="addStatus"></p>
+          <aside class="live-preview" id="livePreview">
+            <p class="eyebrow">LIVE PREVIEW</p>
+            <div class="preview-card">
+              <div class="preview-cover">
+                <img id="previewImage" alt="">
+                <span id="previewCategory">STUDIO</span>
+              </div>
+              <div>
+                <h3 id="previewTitle">Your website</h3>
+                <p id="previewDescription">Your description will appear here.</p>
+              </div>
+            </div>
+            <p class="preview-hint">This is how the website will appear on Athar’s Shelf.</p>
+          </aside>
+        </form>
+      </div>
+      <div id="manage" class="panel">
+        <p class="eyebrow">YOUR COLLECTION</p>
+        <h2>Websites.</h2>
+        <div id="manageList"></div>
+      </div>
+      <div id="inbox" class="panel">
+        <p class="eyebrow">INCOMING</p>
+        <h2>Messages.</h2>
+        <div id="messageList"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="site-detail" id="siteDetail" aria-hidden="true">
+    <div class="detail-top">
+      <span class="detail-mark">A.</span>
+      <span id="detailCrumb">ATHAR'S SHELF / WEBSITE</span>
+      <button id="detailClose" aria-label="Close detail" type="button">×</button>
+    </div>
+    <div class="detail-body">
+      <div class="detail-heading">
+        <div>
+          <p class="eyebrow" id="detailCategory">STUDIO</p>
+          <h2 id="detailTitle">Website title</h2>
+        </div>
+        <a id="detailVisit" target="_blank" rel="noopener">Visit website <span>↗</span></a>
+      </div>
+      <div class="detail-cover">
+        <img id="detailImage" alt="">
+        <span id="detailIndex">01</span>
+      </div>
+      <div class="detail-info">
+        <div>
+          <p class="eyebrow">ATHAR'S NOTE</p>
+          <p id="detailDescription"></p>
+        </div>
+        <div>
+          <p class="eyebrow">TYPE OF WORK</p>
+          <div class="detail-tags" id="detailTags"></div>
+        </div>
+        <div>
+          <p class="eyebrow">LINK</p>
+          <a id="detailUrl" target="_blank" rel="noopener"></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
