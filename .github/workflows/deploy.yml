@@ -39,26 +39,38 @@ jobs:
             git checkout main 2>/dev/null || git checkout master
             git pull --ff-only origin "$(git rev-parse --abbrev-ref HEAD)"
 
+            echo "==> Ensuring compose + Dockerfile exist"
+            git checkout HEAD -- docker-compose.yml compose.yaml Caddyfile server/Dockerfile server/sql/schema.sql 2>/dev/null || true
+            ls -la "$APP_DIR/docker-compose.yml" "$APP_DIR/compose.yaml" "$APP_DIR/server/Dockerfile" || {
+              echo "::error::Compose/Dockerfile missing after pull. Repo files:"
+              git ls-files | grep -E 'docker-compose|compose\.yaml|Dockerfile|Caddyfile' || true
+              ls -la "$APP_DIR"
+              exit 1
+            }
+
             if [ ! -f "$APP_DIR/.env" ]; then
               if [ -f "$APP_DIR/.env.vps.example" ]; then
-                echo "==> Creating .env from .env.vps.example (edit secrets on the server if needed)"
+                echo "==> Creating .env from .env.vps.example"
                 cp "$APP_DIR/.env.vps.example" "$APP_DIR/.env"
               else
-                echo "::error::Missing $APP_DIR/.env — create it from .env.vps.example"
+                echo "::error::Missing $APP_DIR/.env"
                 exit 1
               fi
             fi
 
-            if [ ! -f "$APP_DIR/docker-compose.yml" ] && [ ! -f "$APP_DIR/compose.yaml" ]; then
-              echo "::error::No docker compose file in $APP_DIR"
-              ls -la "$APP_DIR"
+            COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+            [ -f "$COMPOSE_FILE" ] || COMPOSE_FILE="$APP_DIR/compose.yaml"
+
+            echo "==> Docker install check"
+            DOCKER_BIN="$(command -v docker)"
+            echo "docker -> $DOCKER_BIN"
+            if echo "$DOCKER_BIN" | grep -q snap; then
+              echo "::error::Snap Docker cannot reliably read /var/www (opens as /var/lib/snapd/void/...). Reinstall Docker:"
+              echo "  sudo snap remove docker"
+              echo "  curl -fsSL https://get.docker.com | sudo sh"
               exit 1
             fi
-
-            COMPOSE_FILE="$APP_DIR/docker-compose.yml"
-            if [ ! -f "$COMPOSE_FILE" ]; then
-              COMPOSE_FILE="$APP_DIR/compose.yaml"
-            fi
+            docker compose version
 
             echo "==> Building frontend"
             npm ci
@@ -68,10 +80,9 @@ jobs:
             set +a
             export VITE_API_URL="${VITE_API_URL:-}"
             npm run build
+            test -d "$APP_DIR/dist"
 
             echo "==> Restarting Docker stack"
-            # Absolute paths — snap Docker remaps relative --env-file to /var/lib/snapd/void/
-            # Export .env into the shell instead of --env-file.
             set -a
             # shellcheck disable=SC1091
             . "$APP_DIR/.env"
