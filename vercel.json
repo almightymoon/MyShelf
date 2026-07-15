@@ -7,10 +7,6 @@
     {
       "source": "/media/:path*",
       "destination": "http://72.60.193.51:7878/media/:path*"
-    },
-    {
-      "source": "/((?!api/|media/).*)",
-      "destination": "/index.html"
     }
   ]
 }
