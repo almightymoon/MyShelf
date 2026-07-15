@@ -48,7 +48,8 @@ services:
 
   api:
     build:
-      context: ./server
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
