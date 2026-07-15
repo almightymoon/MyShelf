@@ -111,7 +111,26 @@ docker compose exec -T postgres pg_dump -U shelf athar_shelf > backup.sql
 docker volume ls | grep minio
 ```
 
-## 9. Leaving Supabase / Vercel
+## 9. GitHub Actions deploy
+
+Workflow: `.github/workflows/deploy.yml` → SSH into `/var/www/MyShelf`.
+
+Required repo secrets: `IP`, `USERNAME`, `SSH_PRIVATE_KEY`.
+
+On the server, keep a real `.env` (from `.env.vps.example`). The workflow builds `dist/` then runs `docker compose up -d --build`.
+
+### Snap Docker note
+
+If you see `couldn't find env file: /var/lib/snapd/void/.env`, Docker was installed via **snap**. Prefer the official packages:
+
+```bash
+sudo snap remove docker
+curl -fsSL https://get.docker.com | sudo sh
+```
+
+Or always use absolute paths / exported env (the GitHub workflow already does this).
+
+## 10. Leaving Supabase / Vercel
 
 - Point DNS at the VPS
 - Stop relying on `VITE_SUPABASE_*`

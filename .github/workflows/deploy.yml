@@ -30,40 +30,61 @@ jobs:
           port: 22
           script: |
             set -euo pipefail
-            cd /var/www/MyShelf
+
+            APP_DIR=/var/www/MyShelf
+            cd "$APP_DIR"
 
             echo "==> Pulling latest"
             git fetch origin
             git checkout main 2>/dev/null || git checkout master
             git pull --ff-only origin "$(git rev-parse --abbrev-ref HEAD)"
 
-            if [ ! -f .env ]; then
-              echo "::error::Missing /var/www/MyShelf/.env — copy from .env.vps.example and fill secrets"
+            if [ ! -f "$APP_DIR/.env" ]; then
+              if [ -f "$APP_DIR/.env.vps.example" ]; then
+                echo "==> Creating .env from .env.vps.example (edit secrets on the server if needed)"
+                cp "$APP_DIR/.env.vps.example" "$APP_DIR/.env"
+              else
+                echo "::error::Missing $APP_DIR/.env — create it from .env.vps.example"
+                exit 1
+              fi
+            fi
+
+            if [ ! -f "$APP_DIR/docker-compose.yml" ] && [ ! -f "$APP_DIR/compose.yaml" ]; then
+              echo "::error::No docker compose file in $APP_DIR"
+              ls -la "$APP_DIR"
               exit 1
             fi
 
-            if [ ! -f docker-compose.yml ]; then
-              echo "::error::docker-compose.yml not found in $(pwd)"
-              ls -la
-              exit 1
+            COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+            if [ ! -f "$COMPOSE_FILE" ]; then
+              COMPOSE_FILE="$APP_DIR/compose.yaml"
             fi
 
             echo "==> Building frontend"
             npm ci
-            # Same-origin behind Caddy; override in .env with VITE_API_URL if needed
             set -a
             # shellcheck disable=SC1091
-            source .env
+            . "$APP_DIR/.env"
             set +a
             export VITE_API_URL="${VITE_API_URL:-}"
             npm run build
 
             echo "==> Restarting Docker stack"
-            docker compose -f docker-compose.yml --env-file .env up -d --build --remove-orphans
+            # Absolute paths — snap Docker remaps relative --env-file to /var/lib/snapd/void/
+            # Export .env into the shell instead of --env-file.
+            set -a
+            # shellcheck disable=SC1091
+            . "$APP_DIR/.env"
+            set +a
+
+            docker compose \
+              --project-directory "$APP_DIR" \
+              -f "$COMPOSE_FILE" \
+              up -d --build --remove-orphans
 
             echo "==> Waiting for API health"
             ok=0
-            for i in $(seq 1 30); do
+            for i in $(seq 1 40); do
               if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1 \
                 || curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
                 ok=1
@@ -73,10 +94,10 @@ jobs:
             done
             if [ "$ok" -ne 1 ]; then
               echo "Health check failed"
-              docker compose -f docker-compose.yml ps || true
-              docker compose -f docker-compose.yml logs --tail=80 api || true
+              docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" ps || true
+              docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" logs --tail=100 api || true
               exit 1
             fi
 
-            docker compose -f docker-compose.yml ps
+            docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" ps
             echo "==> Deploy complete"
