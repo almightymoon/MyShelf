@@ -14,11 +14,11 @@ Uploads, shelf data, likes, comments, and auth now live in Supabase (not browser
 cp .env.example .env
 ```
 
-Fill in:
+Fill in (Vite requires the `VITE_` prefix — `process.env.SUPABASE_*` won’t reach the browser):
 
 ```
 VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR_ANON_PUBLIC_KEY
+VITE_SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
 ```
 
 Restart the Vite dev server after saving `.env`.

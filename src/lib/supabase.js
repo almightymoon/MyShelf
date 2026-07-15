@@ -1,7 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+// Vite: use import.meta.env.VITE_* (process.env is Node-only)
+const url = (
+  import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.SUPABASE_URL ||
+  ''
+).trim();
+
+const anonKey = (
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  import.meta.env.SUPABASE_ANON_KEY ||
+  ''
+).trim();
 
 export const isSupabaseConfigured = Boolean(url && anonKey && !url.includes('YOUR_PROJECT'));
 
