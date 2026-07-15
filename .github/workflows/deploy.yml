@@ -33,44 +33,23 @@ jobs:
 
             APP_DIR=/var/www/MyShelf
             cd "$APP_DIR"
+            hash -r
 
             echo "==> Pulling latest"
             git fetch origin
             git checkout main 2>/dev/null || git checkout master
             git pull --ff-only origin "$(git rev-parse --abbrev-ref HEAD)"
 
-            echo "==> Ensuring compose + Dockerfile exist"
-            git checkout HEAD -- docker-compose.yml compose.yaml Caddyfile server/Dockerfile server/sql/schema.sql 2>/dev/null || true
-            ls -la "$APP_DIR/docker-compose.yml" "$APP_DIR/compose.yaml" "$APP_DIR/server/Dockerfile" || {
-              echo "::error::Compose/Dockerfile missing after pull. Repo files:"
-              git ls-files | grep -E 'docker-compose|compose\.yaml|Dockerfile|Caddyfile' || true
-              ls -la "$APP_DIR"
-              exit 1
-            }
-
             if [ ! -f "$APP_DIR/.env" ]; then
-              if [ -f "$APP_DIR/.env.vps.example" ]; then
-                echo "==> Creating .env from .env.vps.example"
-                cp "$APP_DIR/.env.vps.example" "$APP_DIR/.env"
-              else
-                echo "::error::Missing $APP_DIR/.env"
-                exit 1
-              fi
+              cp "$APP_DIR/.env.vps.example" "$APP_DIR/.env"
+              echo "==> Created .env from example — edit secrets on the server if needed"
             fi
 
-            COMPOSE_FILE="$APP_DIR/docker-compose.yml"
-            [ -f "$COMPOSE_FILE" ] || COMPOSE_FILE="$APP_DIR/compose.yaml"
-
-            echo "==> Docker install check"
             DOCKER_BIN="$(command -v docker)"
-            echo "docker -> $DOCKER_BIN"
             if echo "$DOCKER_BIN" | grep -q snap; then
-              echo "::error::Snap Docker cannot reliably read /var/www (opens as /var/lib/snapd/void/...). Reinstall Docker:"
-              echo "  sudo snap remove docker"
-              echo "  curl -fsSL https://get.docker.com | sudo sh"
+              echo "::error::Snap Docker detected ($DOCKER_BIN). Install official Docker: curl -fsSL https://get.docker.com | sh"
               exit 1
             fi
-            docker compose version
 
             echo "==> Building frontend"
             npm ci
@@ -80,35 +59,38 @@ jobs:
             set +a
             export VITE_API_URL="${VITE_API_URL:-}"
             npm run build
-            test -d "$APP_DIR/dist"
 
-            echo "==> Restarting Docker stack"
+            echo "==> Docker stack (API on 127.0.0.1:4010 — Apache fronts :80/:443)"
             set -a
             # shellcheck disable=SC1091
             . "$APP_DIR/.env"
             set +a
+            docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" up -d --build --remove-orphans
+            # Stop optional Caddy if it was started earlier and fought Apache
+            docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" stop caddy 2>/dev/null || true
 
-            docker compose \
-              --project-directory "$APP_DIR" \
-              -f "$COMPOSE_FILE" \
-              up -d --build --remove-orphans
+            echo "==> Apache vhost"
+            sudo a2enmod proxy proxy_http rewrite headers ssl 2>/dev/null || true
+            sudo cp "$APP_DIR/deploy/apache/myshelf.conf" /etc/apache2/sites-available/myshelf.conf
+            sudo a2ensite myshelf.conf
+            sudo apache2ctl configtest
+            sudo systemctl reload apache2
 
-            echo "==> Waiting for API health"
+            echo "==> Health checks"
             ok=0
-            for i in $(seq 1 40); do
-              if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1 \
-                || curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:4010/api/health >/dev/null 2>&1; then
                 ok=1
                 break
               fi
               sleep 2
             done
             if [ "$ok" -ne 1 ]; then
-              echo "Health check failed"
-              docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" ps || true
-              docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" logs --tail=100 api || true
+              docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" logs --tail=80 api || true
               exit 1
             fi
-
-            docker compose --project-directory "$APP_DIR" -f "$COMPOSE_FILE" ps
-            echo "==> Deploy complete"
+            curl -fsS http://127.0.0.1:4010/api/health
+            echo
+            docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" ps
+            echo "==> Deploy complete. Point DNS A record for myshelf.athariqbal.com → this server, then:"
+            echo "    sudo certbot --apache -d myshelf.athariqbal.com"

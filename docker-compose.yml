@@ -1,5 +1,6 @@
-# Athar's Shelf — VPS stack (Postgres + MinIO + API + Caddy)
-# Usage: cp .env.vps.example .env && docker compose up -d --build
+# Athar's Shelf — VPS stack (Postgres + MinIO + API)
+# Front door: Apache (already on :80/:443) → proxies to API :4010 + serves ./dist
+# Optional Caddy: docker compose --profile caddy up -d  (only if Apache is stopped)
 
 services:
   postgres:
@@ -56,6 +57,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-4010}:4000"
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -77,6 +80,7 @@ services:
       - ./server/sql:/app/sql:ro
 
   caddy:
+    profiles: ["caddy"]
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
