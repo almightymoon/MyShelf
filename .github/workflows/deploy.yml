@@ -1,0 +1,82 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.IP }}" ]; then echo "::error::Secret IP is not set"; exit 1; fi
+          if [ -z "${{ secrets.USERNAME }}" ]; then echo "::error::Secret USERNAME is not set"; exit 1; fi
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then echo "::error::Secret SSH_PRIVATE_KEY is not set"; exit 1; fi
+          echo "All required secrets are present"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.IP }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            cd /var/www/MyShelf
+
+            echo "==> Pulling latest"
+            git fetch origin
+            git checkout main 2>/dev/null || git checkout master
+            git pull --ff-only origin "$(git rev-parse --abbrev-ref HEAD)"
+
+            if [ ! -f .env ]; then
+              echo "::error::Missing /var/www/MyShelf/.env — copy from .env.vps.example and fill secrets"
+              exit 1
+            fi
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "::error::docker-compose.yml not found in $(pwd)"
+              ls -la
+              exit 1
+            fi
+
+            echo "==> Building frontend"
+            npm ci
+            # Same-origin behind Caddy; override in .env with VITE_API_URL if needed
+            set -a
+            # shellcheck disable=SC1091
+            source .env
+            set +a
+            export VITE_API_URL="${VITE_API_URL:-}"
+            npm run build
+
+            echo "==> Restarting Docker stack"
+            docker compose -f docker-compose.yml --env-file .env up -d --build --remove-orphans
+
+            echo "==> Waiting for API health"
+            ok=0
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1/api/health >/dev/null 2>&1 \
+                || curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Health check failed"
+              docker compose -f docker-compose.yml ps || true
+              docker compose -f docker-compose.yml logs --tail=80 api || true
+              exit 1
+            fi
+
+            docker compose -f docker-compose.yml ps
+            echo "==> Deploy complete"
