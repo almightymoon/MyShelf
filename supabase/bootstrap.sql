@@ -132,10 +132,10 @@ insert into public.categories (id, label) values
 on conflict (id) do nothing;
 
 insert into storage.buckets (id, name, public, file_size_limit)
-values ('media', 'media', true, 157286400)
+values ('media', 'media', true, 314572800)
 on conflict (id) do update
   set public = true,
-      file_size_limit = 157286400;
+      file_size_limit = 314572800;
 
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;

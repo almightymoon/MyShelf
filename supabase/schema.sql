@@ -136,12 +136,12 @@ insert into public.categories (id, label) values
   ('shop', 'Shops')
 on conflict (id) do nothing;
 
--- Storage bucket (public read; 150MB limit for GLB uploads)
+-- Storage bucket (public read; 300MB limit for GLB uploads)
 insert into storage.buckets (id, name, public, file_size_limit)
-values ('media', 'media', true, 157286400)
+values ('media', 'media', true, 314572800)
 on conflict (id) do update
   set public = true,
-      file_size_limit = 157286400;
+      file_size_limit = 314572800;
 
 -- Sample 3D models (remote GLB URLs — no storage upload needed)
 insert into public.models (id, title, note, filename, src_url, sample) values

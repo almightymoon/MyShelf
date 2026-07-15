@@ -49,7 +49,7 @@ In the Supabase dashboard → **SQL Editor** → New query:
 1. Paste the full contents of `supabase/schema.sql`  
 2. Run it  
 
-That creates tables, RLS policies, the public `media` storage bucket (150MB), seed categories, starter sites/ideas, and sample 3D models.
+That creates tables, RLS policies, the public `media` storage bucket (300MB), seed categories, starter sites/ideas, and sample 3D models.
 
 ## 4. Admin account
 

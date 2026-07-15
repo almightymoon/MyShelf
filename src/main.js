@@ -2269,7 +2269,7 @@ $('#userManageList')?.addEventListener('click', async (e) => {
   }
 });
 
-const MODEL_MAX_BYTES = 150 * 1024 * 1024;
+const MODEL_MAX_BYTES = 300 * 1024 * 1024;
 
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
@@ -2306,7 +2306,7 @@ $('#modelForm').onsubmit = async (e) => {
     return;
   }
   if (file.size > MODEL_MAX_BYTES) {
-    status.textContent = `Model is too large (max 150MB). This file is ${formatFileSize(file.size)}.`;
+    status.textContent = `Model is too large (max 300MB). This file is ${formatFileSize(file.size)}.`;
     return;
   }
   if (!supabaseReady) {
