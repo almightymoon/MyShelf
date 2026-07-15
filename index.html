@@ -11,30 +11,58 @@
 <body>
   <div class="reading-line"></div>
   <header>
-    <a class="logo" href="#top">A<span>.</span></a>
+    <a class="logo" href="#home" data-route="home">A<span>.</span></a>
     <nav>
-      <a href="#top">Discover</a>
-      <a href="#models">3D models</a>
+      <a href="#home" data-route="home">Home</a>
+      <a href="#discover" data-route="discover">Discover</a>
+      <a href="#ideas" data-route="ideas">Ideas</a>
+      <a href="#models" data-route="models">3D models</a>
       <a href="#creator">About Athar</a>
-      <a href="#contact">Say hello</a>
     </nav>
     <div class="header-right">
       <a class="athar-link" href="https://athariqbal.com" target="_blank" rel="noopener">athariqbal.com ↗</a>
-      <button class="avatar" id="loginBtn" aria-label="Open owner login">AI</button>
+      <button type="button" class="nav-admin" id="navAdmin" hidden>Admin panel</button>
+      <div class="header-account" id="accountGuest">
+        <a href="#login" data-route="login">Log in</a>
+        <a class="account-signup" href="#signup" data-route="signup">Sign up</a>
+      </div>
+      <div class="header-account" id="accountMember" hidden>
+        <span class="account-chip" id="accountChip">U</span>
+        <button type="button" id="memberSignOut">Sign out</button>
+      </div>
       <button class="submit-site" id="jumpContact">Submit a website</button>
     </div>
   </header>
 
   <main id="top">
+    <div class="page-view home-page" data-page="home">
     <section class="intro">
-      <div>
+      <div class="intro-copy-block">
         <p class="eyebrow">ATHAR'S SHELF / 2026</p>
-        <h1>Good websites,<br>worth <em>keeping.</em></h1>
+        <h1>Sites with<br><em>gravity.</em></h1>
         <p class="intro-copy">A personal collection of digital work, thoughtful studios and clever corners of the internet — curated by Athar Iqbal.</p>
+      </div>
+      <div class="hero-index" aria-hidden="true">
+        <p>PRIVATE<br>ARCHIVE</p><b>01</b><span>VOL. 26</span><i></i>
       </div>
       <a class="intro-link" href="#creator"><span>Meet the<br>curator</span><b>↓</b></a>
     </section>
 
+    <div class="signal-strip" aria-label="Collection themes"><span>01 / SELECTED DIGITAL WORK</span><span>02 / SPATIAL STUDIES</span><span>03 / THINGS WORTH A SECOND LOOK</span><i>✦</i></div>
+
+    <section class="home-collection">
+      <div class="collection-heading"><div><p class="eyebrow">A SMALL, CONSIDERED EDIT</p><h2>On the<br>shelf now.</h2></div><a href="#discover" data-route="discover">See every website <span>↗</span></a></div>
+      <div class="site-grid home-site-grid" id="homeSiteGrid" aria-busy="true"></div>
+    </section>
+
+    <section class="home-models">
+      <div class="collection-heading"><div><p class="eyebrow">SPATIAL STUDIES</p><h2>In the<br>round.</h2></div><a href="#models" data-route="models">Enter 3D library <span>↗</span></a></div>
+      <div class="home-model-grid" id="homeModelsGrid" aria-busy="true"></div>
+    </section>
+    </div>
+
+    <div class="page-view discover-page" data-page="discover">
+    <section class="discover-intro"><p class="eyebrow">THE COMPLETE INDEX</p><h1>Find your<br>next <em>reference.</em></h1><p>Every website in the collection, indexed for when a spark is all you need.</p></section>
     <section class="toolbar">
       <div class="search">
         <span>⌕</span>
@@ -50,9 +78,17 @@
         <span id="resultCount">06 results</span>
         <span>Hover to preview ↗</span>
       </div>
-      <div class="site-grid" id="siteGrid"></div>
+      <div class="site-grid" id="siteGrid" aria-busy="true"></div>
     </section>
+    </div>
 
+    <div class="page-view ideas-page" data-page="ideas">
+      <section class="ideas-intro"><div><p class="eyebrow">THE VISUAL PINBOARD</p><h1>Ideas worth<br>holding on to.</h1></div><p>A living collection of image, material, type and space references — gathered before they become work.</p></section>
+      <section class="ideas-toolbar"><span id="ideasCount">00 pins</span><span>Tap any image to look closer ↗</span></section>
+      <section class="ideas-wall" id="ideasWall"></section>
+    </div>
+
+    <div class="page-view models-page" data-page="models">
     <section class="models-section" id="models">
       <div class="models-head">
         <div>
@@ -61,8 +97,60 @@
         </div>
         <p>Drag to orbit. Scroll to zoom. A few pieces worth keeping in the round.</p>
       </div>
-      <div class="models-grid" id="modelsGrid"></div>
+      <div class="models-grid" id="modelsGrid" aria-busy="true"></div>
     </section>
+    </div>
+
+    <div class="page-view auth-page" data-page="login">
+      <section class="auth-shell">
+        <div class="auth-visual" aria-hidden="true">
+          <p class="eyebrow">ATHAR'S SHELF</p>
+          <strong>One door<br>in.</strong>
+          <span>Members download. Athar curates from the same login.</span>
+          <i class="auth-mark">A.</i>
+        </div>
+        <div class="auth-main">
+          <div class="auth-copy">
+            <p class="eyebrow">WELCOME BACK</p>
+            <h1>Log in.</h1>
+            <p>Use your shelf account for downloads, likes, and comments. Athar’s credentials open the admin panel.</p>
+          </div>
+          <form class="auth-card" id="memberLoginForm">
+            <label>Email<input name="email" type="email" required placeholder="you@email.com" autocomplete="username"></label>
+            <label>Password<input name="password" type="password" required placeholder="Your password" autocomplete="current-password"></label>
+            <button type="submit">Log in <span>↗</span></button>
+            <p class="auth-note" id="memberLoginNote">Members and owner use the same door.</p>
+            <p class="auth-switch">New here? <a href="#signup" data-route="signup">Create an account</a></p>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div class="page-view auth-page" data-page="signup">
+      <section class="auth-shell auth-shell-signup">
+        <div class="auth-visual auth-visual-signup" aria-hidden="true">
+          <p class="eyebrow">JOIN THE SHELF</p>
+          <strong>Keep what<br>moves you.</strong>
+          <span>Free account · downloads · likes · comments</span>
+          <i class="auth-mark">✦</i>
+        </div>
+        <div class="auth-main">
+          <div class="auth-copy">
+            <p class="eyebrow">CREATE ACCESS</p>
+            <h1>Sign up.</h1>
+            <p>One free account unlocks downloads across Ideas and 3D models, plus likes and comments.</p>
+          </div>
+          <form class="auth-card" id="memberSignupForm">
+            <label>Name<input name="name" required placeholder="Your name" autocomplete="name"></label>
+            <label>Email<input name="email" type="email" required placeholder="you@email.com" autocomplete="email"></label>
+            <label>Password<input name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
+            <button type="submit">Create account <span>↗</span></button>
+            <p class="auth-note" id="memberSignupNote">Takes less than a minute.</p>
+            <p class="auth-switch">Already have an account? <a href="#login" data-route="login">Log in</a></p>
+          </form>
+        </div>
+      </section>
+    </div>
 
     <section class="creator" id="creator">
       <div class="creator-image"><span>AI</span><i>✦</i></div>
@@ -96,27 +184,15 @@
     <a href="#top">Back to top ↑</a>
   </footer>
 
-  <div class="modal" id="loginModal">
-    <div class="modal-card">
-      <button class="close" data-close type="button">×</button>
-      <p class="eyebrow">OWNER ACCESS</p>
-      <h2>Welcome, Athar.</h2>
-      <form id="loginForm">
-        <input name="email" type="email" required placeholder="Email address" autocomplete="username">
-        <input name="password" type="password" required placeholder="Password" autocomplete="current-password">
-        <button type="submit">Enter dashboard <span>↗</span></button>
-      </form>
-      <small id="loginNote">Owner access only.</small>
-    </div>
-  </div>
-
   <section class="dashboard" id="dashboard">
     <aside>
       <a class="logo" href="#top">A<span>.</span></a>
       <p class="eyebrow">ATHAR'S SHELF</p>
       <button class="dash-link active" data-panel="add">Add website</button>
       <button class="dash-link" data-panel="manage">Collection <b id="manageCount"></b></button>
+      <button class="dash-link" data-panel="ideasAdmin">Ideas <b id="ideaCount"></b></button>
       <button class="dash-link" data-panel="modelsAdmin">3D models <b id="modelCount"></b></button>
+      <button class="dash-link" data-panel="usersAdmin">Users <b id="userCount"></b></button>
       <button class="dash-link" data-panel="categories">Categories <b id="categoryCount"></b></button>
       <button class="dash-link" data-panel="inbox">Messages <b id="messageCount"></b></button>
       <button id="signout" type="button">Sign out ↗</button>
@@ -215,6 +291,36 @@
         <h2>Websites.</h2>
         <div id="manageList"></div>
       </div>
+      <div id="ideasAdmin" class="panel">
+        <p class="eyebrow">VISUAL PINBOARD</p>
+        <h2>Ideas.</h2>
+        <form id="ideaForm" class="idea-form">
+          <label>Title<input name="title" required placeholder="e.g. Late afternoon"></label>
+          <label>Type / tag<input name="type" required placeholder="e.g. Light, Texture, Colour"></label>
+          <label>Access
+            <select name="access">
+              <option value="free">Free</option>
+              <option value="paid">Paid</option>
+            </select>
+          </label>
+          <label>Price <small>(if paid)</small><input name="price" type="number" min="0" step="1" placeholder="4"></label>
+          <div class="media-field">
+            <span class="media-label">Image <small>(upload or URL)</small></span>
+            <div class="upload-row">
+              <label class="upload-btn">
+                Upload image
+                <input id="ideaUpload" type="file" accept="image/*" hidden>
+              </label>
+              <button type="button" class="upload-clear" id="clearIdeaUpload" hidden>Clear</button>
+            </div>
+            <div class="upload-status" id="ideaUploadStatus"></div>
+            <input name="image" type="url" placeholder="Or paste an image URL">
+          </div>
+          <button type="submit">Publish idea <span>↗</span></button>
+          <p class="form-status" id="ideaStatus"></p>
+        </form>
+        <div id="ideaManageList"></div>
+      </div>
       <div id="modelsAdmin" class="panel">
         <p class="eyebrow">SPATIAL WORK</p>
         <h2>3D models.</h2>
@@ -235,6 +341,12 @@
           <p class="form-status" id="modelStatus"></p>
         </form>
         <div id="modelManageList"></div>
+      </div>
+      <div id="usersAdmin" class="panel">
+        <p class="eyebrow">SHELF MEMBERS</p>
+        <h2>Users.</h2>
+        <p class="users-admin-lead">People who signed up to download, like, and comment.</p>
+        <div id="userManageList"></div>
       </div>
       <div id="categories" class="panel">
         <p class="eyebrow">SHELF LABELS</p>
@@ -262,6 +374,7 @@
     </div>
     <div class="detail-body">
       <header class="detail-hero-copy">
+        <div class="detail-archive-row"><span>SELECTED ENTRY</span><span id="detailArchiveIndex">ARCHIVE / 01</span><span>ATHAR'S SHELF</span></div>
         <p class="eyebrow" id="detailCategory">STUDIO</p>
         <div class="detail-title-row">
           <h2 id="detailTitle">Website title</h2>
@@ -274,6 +387,12 @@
         <img id="detailImage" alt="">
         <span id="detailIndex">01</span>
       </figure>
+
+      <section class="detail-reading-bar" aria-label="Project overview">
+        <div><span>FORMAT</span><b id="detailFormat">Digital reference</b></div>
+        <div><span>ENTRY</span><b id="detailEntry">01 / 06</b></div>
+        <div><span>STATUS</span><b>On the shelf</b></div>
+      </section>
 
       <section class="detail-meta">
         <div class="detail-meta-note">
@@ -323,7 +442,7 @@
         <p class="model-detail-note" id="modelDetailNote"></p>
         <div class="model-detail-actions">
           <button type="button" class="model-download" id="modelDownloadBtn" hidden>Download model <span>↓</span></button>
-          <p class="model-download-hint" id="modelDownloadHint">Owner sign-in unlocks download.</p>
+          <p class="model-download-hint" id="modelDownloadHint">Log in to download this model.</p>
           <p class="model-orbit-hint">Drag to orbit · Scroll to zoom</p>
         </div>
       </header>
@@ -349,7 +468,67 @@
           <span>Interactive</span>
         </div>
       </div>
+
+      <section class="model-related" id="relatedModels">
+        <div class="model-related-head"><div><p class="eyebrow">CONTINUE EXPLORING</p><h3>More from the<br>spatial library.</h3></div><a href="#models" data-route="models">View all models <span>↗</span></a></div>
+        <div class="model-related-grid" id="relatedModelsGrid"></div>
+      </section>
     </div>
+  </section>
+
+  <section class="idea-lightbox" id="ideaLightbox" aria-hidden="true">
+    <button type="button" id="ideaLightboxClose" aria-label="Close image">×</button>
+    <div class="idea-lightbox-stage">
+      <div class="idea-stage-frame">
+        <img id="ideaLightboxImage" alt="">
+        <button type="button" class="idea-dl-fab" id="ideaPanelOpen" aria-label="Open download panel">
+          <span aria-hidden="true">↓</span>
+        </button>
+      </div>
+      <div class="idea-lightbox-meta">
+        <span id="ideaLightboxType"></span>
+        <h2 id="ideaLightboxTitle"></h2>
+      </div>
+    </div>
+
+    <aside class="idea-side-panel" id="ideaSidePanel" aria-hidden="true">
+      <div class="idea-panel-head">
+        <div>
+          <p class="eyebrow">PIN DETAILS</p>
+          <h3 id="ideaPanelTitle">Idea</h3>
+        </div>
+        <button type="button" id="ideaPanelClose" aria-label="Close panel">×</button>
+      </div>
+
+      <div class="idea-panel-access" id="ideaPanelAccess"></div>
+
+      <section class="idea-panel-block">
+        <p class="eyebrow">DOWNLOAD QUALITY</p>
+        <div class="idea-quality" id="ideaQuality" role="radiogroup" aria-label="Download quality">
+          <label class="idea-quality-option"><input type="radio" name="ideaQuality" value="preview" checked><span><b>Preview</b><small>Web · ~720px</small></span></label>
+          <label class="idea-quality-option"><input type="radio" name="ideaQuality" value="high"><span><b>High</b><small>Retina · ~1600px</small></span></label>
+          <label class="idea-quality-option"><input type="radio" name="ideaQuality" value="print"><span><b>Print</b><small>Archive · ~2400px</small></span></label>
+        </div>
+        <button type="button" class="idea-download" id="ideaDownloadBtn">Download image <span>↓</span></button>
+        <p class="idea-download-hint" id="ideaDownloadHint">Log in to download this pin.</p>
+      </section>
+
+      <section class="idea-panel-block idea-social">
+        <div class="idea-like-row">
+          <button type="button" class="idea-like-btn" id="ideaLikeBtn" aria-pressed="false">
+            <span aria-hidden="true">♡</span> Like this pin
+          </button>
+          <b id="ideaLikeCount">0 likes</b>
+        </div>
+        <p class="eyebrow">COMMENTS</p>
+        <div class="idea-comments" id="ideaComments"></div>
+        <form class="idea-comment-form" id="ideaCommentForm">
+          <textarea name="comment" rows="3" required maxlength="280" placeholder="Share what this pin makes you feel…"></textarea>
+          <button type="submit">Post comment <span>↗</span></button>
+          <p class="idea-comment-note" id="ideaCommentNote"></p>
+        </form>
+      </section>
+    </aside>
   </section>
 
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>

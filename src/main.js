@@ -6,6 +6,7 @@ import './styles/editor.css';
 import './styles/appearance.css';
 import './styles/extras.css';
 import './styles/models.css';
+import './styles/experience.css';
 import {
   createObjectUrl,
   deleteModelBlob,
@@ -87,10 +88,62 @@ const galleryFallbacks = [
   'https://images.unsplash.com/photo-1487017159836-4e23ece2e4cf?auto=format&fit=crop&w=1400&q=85',
 ];
 
+const defaultIdeas = [
+  { id: 'soft-chrome', title: 'Soft chrome', type: 'Material study', access: 'free', image: 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?auto=format&fit=crop&w=900&q=85' },
+  { id: 'quiet-architecture', title: 'Quiet architecture', type: 'Space', access: 'free', image: 'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?auto=format&fit=crop&w=900&q=85' },
+  { id: 'red-interruption', title: 'A red interruption', type: 'Colour', access: 'paid', price: 4, image: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=85' },
+  { id: 'type-in-motion', title: 'Type in motion', type: 'Typography', access: 'free', image: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?auto=format&fit=crop&w=900&q=85' },
+  { id: 'blue-room', title: 'The blue room', type: 'Atmosphere', access: 'free', image: 'https://images.unsplash.com/photo-1519608487953-e999c86e7454?auto=format&fit=crop&w=900&q=85' },
+  { id: 'gloss-grain', title: 'Gloss & grain', type: 'Material study', access: 'paid', price: 6, image: 'https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?auto=format&fit=crop&w=900&q=85' },
+  { id: 'useful-object', title: 'A useful object', type: 'Object', access: 'free', image: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=900&q=85' },
+  { id: 'paper-folded', title: 'Paper, folded', type: 'Composition', access: 'free', image: 'https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=900&q=85' },
+  { id: 'late-afternoon', title: 'Late afternoon', type: 'Light', access: 'free', image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=85' },
+  { id: 'frame-within', title: 'A frame within', type: 'Composition', access: 'free', image: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=85' },
+  { id: 'signal-orange', title: 'Signal orange', type: 'Colour', access: 'paid', price: 3, image: 'https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?auto=format&fit=crop&w=900&q=85' },
+  { id: 'almost-tactile', title: 'Almost tactile', type: 'Texture', access: 'free', image: 'https://images.unsplash.com/photo-1528459105426-b9548367069b?auto=format&fit=crop&w=900&q=85' },
+];
+
+const ideaQualityMap = {
+  preview: { w: 720, q: 60, label: 'preview' },
+  high: { w: 1600, q: 85, label: 'high' },
+  print: { w: 2400, q: 90, label: 'print' },
+};
+
+const ideaSeedNotes = {
+  'late-afternoon': {
+    likes: 12,
+    likedBy: [],
+    comments: [
+      { name: 'Mina', text: 'That shadow line is everything — warm light done quietly.', at: Date.now() - 86400000 * 2 },
+      { name: 'Jules', text: 'Feels like a still from a road trip film.', at: Date.now() - 86400000 },
+    ],
+  },
+  'soft-chrome': {
+    likes: 7,
+    likedBy: [],
+    comments: [{ name: 'Ari', text: 'Chrome like soft metal — saving for a product page mood.', at: Date.now() - 86400000 * 4 }],
+  },
+};
+
 const get = (k, f = []) => JSON.parse(localStorage.getItem(k) || JSON.stringify(f));
 const set = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 const $ = (s) => document.querySelector(s);
 
+function normalizeIdeas(list) {
+  return (Array.isArray(list) ? list : []).map((idea, i) => ({
+    access: 'free',
+    ...idea,
+    id: idea.id || `idea-${Date.now()}-${i}`,
+    title: idea.title || 'Untitled pin',
+    type: idea.type || 'Reference',
+    image: idea.image || '',
+  })).filter((idea) => idea.image);
+}
+
+let ideas = normalizeIdeas(get('athar-shelf-ideas', defaultIdeas));
+function saveIdeas() {
+  set('athar-shelf-ideas', ideas);
+}
 let sites = get('athar-shelf-sites', defaults);
 let messages = get('athar-shelf-messages');
 let activeFilter = 'all';
@@ -254,13 +307,106 @@ function clearDraftMedia() {
   renderGalleryUploads();
 }
 
-function isLoggedIn() {
+function isAdmin() {
   return localStorage.getItem('athar-shelf-auth') === 'true';
 }
 
-function setLoggedIn(on) {
+function setAdmin(on) {
   if (on) localStorage.setItem('athar-shelf-auth', 'true');
   else localStorage.removeItem('athar-shelf-auth');
+}
+
+function getUsers() {
+  return get('athar-shelf-users', []);
+}
+
+function saveUsers(users) {
+  set('athar-shelf-users', users);
+}
+
+function getMemberSession() {
+  return get('athar-shelf-session', null);
+}
+
+function setMemberSession(user) {
+  if (user) set('athar-shelf-session', { email: user.email, name: user.name });
+  else localStorage.removeItem('athar-shelf-session');
+}
+
+function isMember() {
+  return Boolean(getMemberSession()?.email);
+}
+
+function canDownload() {
+  return isAdmin() || isMember();
+}
+
+/** @deprecated use isAdmin — kept for fewer churn points during migration */
+function isLoggedIn() {
+  return isAdmin();
+}
+
+function setLoggedIn(on) {
+  setAdmin(on);
+}
+
+let activeIdeaIndex = null;
+let pendingDownload = null;
+let draftIdeaImage = '';
+
+function syncAccountUi() {
+  const member = getMemberSession();
+  const admin = isAdmin();
+  const guest = $('#accountGuest');
+  const account = $('#accountMember');
+  const navAdmin = $('#navAdmin');
+  const signedIn = Boolean(member) || admin;
+
+  if (guest) guest.hidden = signedIn;
+  if (account) account.hidden = !signedIn;
+  if (navAdmin) navAdmin.hidden = !admin;
+
+  if (signedIn && $('#accountChip')) {
+    const name = member?.name || (admin ? 'Athar Iqbal' : 'U');
+    const email = member?.email || (admin ? ADMIN.email : '');
+    const initials = name
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
+    $('#accountChip').textContent = initials || (admin ? 'AI' : 'U');
+    $('#accountChip').title = email || name;
+  }
+  syncModelDownloadUi();
+  syncIdeaDownloadUi();
+}
+
+function requireDownloadAuth(kind, payload) {
+  pendingDownload = { kind, ...payload };
+  if (kind === 'idea') closeIdea();
+  if (kind === 'model') closeModelDetail();
+  window.location.hash = 'login';
+  const note = $('#memberLoginNote');
+  if (note) {
+    note.textContent = 'Log in to finish your download.';
+    note.classList.remove('error');
+  }
+}
+
+async function resumePendingDownload() {
+  if (!pendingDownload || !canDownload()) return;
+  const job = pendingDownload;
+  pendingDownload = null;
+  if (job.kind === 'model' && job.id) {
+    window.location.hash = 'models';
+    await openModelDetail(job.id);
+    await downloadActiveModel(true);
+  } else if (job.kind === 'idea' && Number.isInteger(job.index)) {
+    window.location.hash = 'ideas';
+    openIdea(job.index);
+    await downloadActiveIdea(true);
+  }
 }
 
 function renderSites() {
@@ -287,8 +433,290 @@ function renderSites() {
       .join('') || '<p>No websites match that search.</p>';
 
   $('#resultCount').textContent = `${String(shown.length).padStart(2, '0')} results`;
+  $('#siteGrid').setAttribute('aria-busy', 'false');
+  renderHomeSites();
   const countEl = $('#siteCount');
   if (countEl) countEl.textContent = String(sites.length).padStart(2, '0');
+}
+
+function renderHomeSites() {
+  const grid = $('#homeSiteGrid');
+  if (!grid) return;
+  grid.innerHTML = sites.slice(0, 3).map((s, i) => {
+    const look = lookOf(s);
+    const index = sites.indexOf(s);
+    return `<article class="site-card" data-depth="${i + 1}" data-site-index="${index}" tabindex="0" role="button" aria-label="Open ${escapeHtml(s.title)}" style="--site-background:${look.cardBg};--site-title:${look.titleColor};--site-body:${look.bodyColor};--site-accent:${look.accentColor};text-align:${look.textAlign}">
+      <div class="cover"><img src="${escapeHtml(s.image || fallbackImage)}" alt="${escapeHtml(s.title)}" style="object-position:${look.imagePosition}"><span class="card-top">${escapeHtml(categoryLabel(s.category))}</span><div class="card-overlay"><span class="open">↗</span></div></div>
+      <div class="card-info"><div><h3>${escapeHtml(s.title)}</h3>${s.blurb ? `<p class="card-blurb">${escapeHtml(s.blurb)}</p>` : ''}</div><span class="card-index">${String(i + 1).padStart(2, '0')}</span></div>
+    </article>`;
+  }).join('');
+  grid.setAttribute('aria-busy', 'false');
+}
+
+function renderIdeas() {
+  const wall = $('#ideasWall');
+  if (!wall) return;
+  wall.innerHTML = ideas.map((idea, i) => `<article class="idea-pin" data-idea-index="${i}" tabindex="0" role="button" aria-label="Open ${escapeHtml(idea.title)}">
+    <img src="${idea.image}" alt="${escapeHtml(idea.title)}" loading="lazy"><div><span>${escapeHtml(idea.type)}</span><h2>${escapeHtml(idea.title)}</h2><b>↗</b></div>
+  </article>`).join('');
+  $('#ideasCount').textContent = `${String(ideas.length).padStart(2, '0')} pins`;
+}
+
+function ideaKey(index) {
+  return ideas[index]?.id || String(index);
+}
+
+function getIdeaNotes() {
+  const stored = get('athar-shelf-idea-notes', null);
+  if (stored && typeof stored === 'object') {
+    if (stored['8'] && !stored['late-afternoon']) {
+      stored['late-afternoon'] = stored['8'];
+      delete stored['8'];
+    }
+    if (stored['0'] && !stored['soft-chrome']) {
+      stored['soft-chrome'] = stored['0'];
+      delete stored['0'];
+    }
+    return stored;
+  }
+  set('athar-shelf-idea-notes', ideaSeedNotes);
+  return { ...ideaSeedNotes };
+}
+
+function saveIdeaNotes(notes) {
+  set('athar-shelf-idea-notes', notes);
+}
+
+function ideaSocial(index) {
+  const notes = getIdeaNotes();
+  const key = ideaKey(index);
+  if (!notes[key]) {
+    notes[key] = { likes: 0, likedBy: [], comments: [] };
+    saveIdeaNotes(notes);
+  }
+  return notes[key];
+}
+
+function memberId() {
+  const member = getMemberSession();
+  if (member?.email) return member.email;
+  if (isAdmin()) return ADMIN.email;
+  return null;
+}
+
+function ideaQualityUrl(src, quality) {
+  const preset = ideaQualityMap[quality] || ideaQualityMap.high;
+  try {
+    const url = new URL(src);
+    url.searchParams.set('w', String(preset.w));
+    url.searchParams.set('q', String(preset.q));
+    url.searchParams.set('auto', 'format');
+    url.searchParams.set('fit', 'crop');
+    return url.toString();
+  } catch {
+    return src;
+  }
+}
+
+function selectedIdeaQuality() {
+  return document.querySelector('input[name="ideaQuality"]:checked')?.value || 'high';
+}
+
+function openIdeaPanel() {
+  const panel = $('#ideaSidePanel');
+  if (!panel) return;
+  panel.classList.add('is-open');
+  panel.setAttribute('aria-hidden', 'false');
+  $('#ideaLightbox')?.classList.add('panel-open');
+}
+
+function closeIdeaPanel() {
+  const panel = $('#ideaSidePanel');
+  if (!panel) return;
+  panel.classList.remove('is-open');
+  panel.setAttribute('aria-hidden', 'true');
+  $('#ideaLightbox')?.classList.remove('panel-open');
+}
+
+function renderIdeaAccess(idea) {
+  const el = $('#ideaPanelAccess');
+  if (!el || !idea) return;
+  if (idea.access === 'paid') {
+    el.innerHTML = `<span class="idea-access paid">Paid pin</span><p>High-res download · $${idea.price || 4}. Free with a shelf account.</p>`;
+  } else {
+    el.innerHTML = `<span class="idea-access free">Free pin</span><p>Open for members — pick a quality and download.</p>`;
+  }
+}
+
+function renderIdeaSocial() {
+  if (activeIdeaIndex === null) return;
+  const social = ideaSocial(activeIdeaIndex);
+  const uid = memberId();
+  const liked = uid ? social.likedBy.includes(uid) : false;
+  const likeBtn = $('#ideaLikeBtn');
+  const likeCount = $('#ideaLikeCount');
+  if (likeBtn) {
+    likeBtn.classList.toggle('is-liked', liked);
+    likeBtn.setAttribute('aria-pressed', liked ? 'true' : 'false');
+    likeBtn.innerHTML = liked
+      ? '<span aria-hidden="true">♥</span> Liked'
+      : '<span aria-hidden="true">♡</span> Like this pin';
+  }
+  if (likeCount) {
+    const n = social.likes || 0;
+    likeCount.textContent = `${n} like${n === 1 ? '' : 's'}`;
+  }
+  const list = $('#ideaComments');
+  if (!list) return;
+  if (!social.comments?.length) {
+    list.innerHTML = '<p class="idea-comments-empty">No comments yet — leave the first feeling.</p>';
+  } else {
+    list.innerHTML = social.comments
+      .slice()
+      .reverse()
+      .map(
+        (c) => `<article class="idea-comment"><header><b>${escapeHtml(c.name)}</b><time>${new Date(c.at).toLocaleDateString()}</time></header><p>${escapeHtml(c.text)}</p></article>`
+      )
+      .join('');
+  }
+  const note = $('#ideaCommentNote');
+  if (note) {
+    note.textContent = canDownload()
+      ? 'Be kind — this is a shared mood board.'
+      : 'Log in to like or comment.';
+    note.classList.toggle('error', false);
+  }
+}
+
+function openIdea(index) {
+  const idea = ideas[index];
+  if (!idea) return;
+  activeIdeaIndex = index;
+  closeIdeaPanel();
+  $('#ideaLightboxImage').src = idea.image;
+  $('#ideaLightboxImage').alt = idea.title;
+  $('#ideaLightboxType').textContent = idea.type;
+  $('#ideaLightboxTitle').textContent = idea.title;
+  if ($('#ideaPanelTitle')) $('#ideaPanelTitle').textContent = idea.title;
+  renderIdeaAccess(idea);
+  renderIdeaSocial();
+  syncIdeaDownloadUi();
+  const preview = document.querySelector('input[name="ideaQuality"][value="preview"]');
+  if (preview) preview.checked = true;
+  $('#ideaLightbox').classList.add('show');
+  $('#ideaLightbox').setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeIdea() {
+  activeIdeaIndex = null;
+  closeIdeaPanel();
+  $('#ideaLightbox').classList.remove('show');
+  $('#ideaLightbox').setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  syncIdeaDownloadUi();
+}
+
+function syncIdeaDownloadUi() {
+  const hint = $('#ideaDownloadHint');
+  const btn = $('#ideaDownloadBtn');
+  if (!btn) return;
+  const open = activeIdeaIndex !== null;
+  btn.hidden = !open;
+  if (hint) {
+    hint.hidden = !open || canDownload();
+    hint.innerHTML = canDownload()
+      ? ''
+      : 'Log in required — <a href="#login">Log in</a> or <a href="#signup">Sign up</a> to download.';
+  }
+}
+
+async function downloadActiveIdea(skipAuthCheck = false) {
+  if (activeIdeaIndex === null) return;
+  if (!skipAuthCheck && !canDownload()) {
+    requireDownloadAuth('idea', { index: activeIdeaIndex });
+    return;
+  }
+  const idea = ideas[activeIdeaIndex];
+  if (!idea) return;
+  const quality = selectedIdeaQuality();
+  const preset = ideaQualityMap[quality] || ideaQualityMap.high;
+  const src = ideaQualityUrl(idea.image, quality);
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${idea.title.replace(/\s+/g, '-').toLowerCase()}-${preset.label}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch {
+    window.open(src, '_blank', 'noopener');
+  }
+}
+
+function toggleIdeaLike() {
+  if (activeIdeaIndex === null) return;
+  if (!canDownload()) {
+    requireDownloadAuth('idea', { index: activeIdeaIndex });
+    return;
+  }
+  const uid = memberId();
+  if (!uid) return;
+  const notes = getIdeaNotes();
+  const key = ideaKey(activeIdeaIndex);
+  const social = notes[key] || { likes: 0, likedBy: [], comments: [] };
+  const liked = social.likedBy.includes(uid);
+  if (liked) {
+    social.likedBy = social.likedBy.filter((id) => id !== uid);
+    social.likes = Math.max(0, (social.likes || 1) - 1);
+  } else {
+    social.likedBy = [...social.likedBy, uid];
+    social.likes = (social.likes || 0) + 1;
+  }
+  notes[key] = social;
+  saveIdeaNotes(notes);
+  renderIdeaSocial();
+}
+
+function postIdeaComment(text) {
+  if (activeIdeaIndex === null) return false;
+  if (!canDownload()) {
+    requireDownloadAuth('idea', { index: activeIdeaIndex });
+    return false;
+  }
+  const member = getMemberSession();
+  const name = member?.name || (isAdmin() ? 'Athar' : 'Guest');
+  const notes = getIdeaNotes();
+  const key = ideaKey(activeIdeaIndex);
+  const social = notes[key] || { likes: 0, likedBy: [], comments: [] };
+  social.comments = social.comments || [];
+  social.comments.push({ name, text, at: Date.now() });
+  notes[key] = social;
+  saveIdeaNotes(notes);
+  renderIdeaSocial();
+  return true;
+}
+
+function renderSitesSkeleton() {
+  ['#siteGrid', '#homeSiteGrid'].forEach((selector) => {
+    const grid = $(selector);
+    if (!grid) return;
+    grid.innerHTML = Array.from({ length: selector === '#siteGrid' ? 8 : 3 }, () => `<article class="site-skeleton" aria-hidden="true"><div></div><span></span><i></i></article>`).join('');
+    grid.setAttribute('aria-busy', 'true');
+  });
+}
+
+function renderModelsSkeleton() {
+  ['#modelsGrid', '#homeModelsGrid'].forEach((selector) => {
+    const grid = $(selector);
+    if (!grid) return;
+    grid.innerHTML = Array.from({ length: 3 }, () => `<article class="model-skeleton" aria-hidden="true"><div></div><span></span><i></i></article>`).join('');
+    grid.setAttribute('aria-busy', 'true');
+  });
 }
 
 function renderFilters() {
@@ -345,8 +773,14 @@ function renderDash() {
   $('#messageCount').textContent = messages.length;
   const modelCount = $('#modelCount');
   if (modelCount) modelCount.textContent = modelMeta.length;
+  const ideaCount = $('#ideaCount');
+  if (ideaCount) ideaCount.textContent = ideas.length;
+  const userCount = $('#userCount');
+  if (userCount) userCount.textContent = getUsers().length;
   renderCategoryList();
   renderModelManageList();
+  renderIdeaManageList();
+  renderUserManageList();
   $('#manageList').innerHTML =
     sites
       .map(
@@ -359,6 +793,45 @@ function renderDash() {
         (m) => `<article class="message-item"><p class="message-meta">${escapeHtml(m.name)} · ${escapeHtml(m.email)}</p><h3>${escapeHtml(m.name)}</h3><p>${escapeHtml(m.message)}</p></article>`
       )
       .join('') || '<p>No messages yet.</p>';
+}
+
+function renderIdeaManageList() {
+  const list = $('#ideaManageList');
+  if (!list) return;
+  list.innerHTML =
+    ideas
+      .map(
+        (idea, i) =>
+          `<div class="manage-item"><div class="manage-idea-thumb"><img src="${escapeHtml(idea.image)}" alt=""></div><div><h3>${escapeHtml(idea.title)}</h3><p>${escapeHtml(idea.type)} · ${idea.access === 'paid' ? `Paid $${idea.price || 0}` : 'Free'}</p></div><button type="button" class="delete" data-remove-idea="${i}">Remove</button></div>`
+      )
+      .join('') || '<p>No ideas on the pinboard yet.</p>';
+}
+
+function renderUserManageList() {
+  const list = $('#userManageList');
+  if (!list) return;
+  const users = getUsers();
+  list.innerHTML =
+    users
+      .map(
+        (user, i) =>
+          `<div class="manage-item"><div><h3>${escapeHtml(user.name || 'Member')}</h3><p>${escapeHtml(user.email)} · joined ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</p></div><button type="button" class="delete" data-remove-user="${i}">Remove</button></div>`
+      )
+      .join('') || '<p>No members yet. Signups will appear here.</p>';
+}
+
+function syncIdeaUploadUi() {
+  const clearBtn = $('#clearIdeaUpload');
+  const status = $('#ideaUploadStatus');
+  if (clearBtn) clearBtn.hidden = !draftIdeaImage;
+  if (status) status.textContent = draftIdeaImage ? 'Idea image ready.' : '';
+}
+
+function clearIdeaDraft() {
+  draftIdeaImage = '';
+  const input = $('#ideaUpload');
+  if (input) input.value = '';
+  syncIdeaUploadUi();
 }
 
 function renderModelManageList() {
@@ -378,8 +851,11 @@ async function renderModels() {
   if (!grid) return;
   if (!modelMeta.length) {
     grid.innerHTML = '<p class="models-empty">No 3D models on the shelf yet. Upload one from the dashboard.</p>';
+    grid.setAttribute('aria-busy', 'false');
     return;
   }
+
+  grid.setAttribute('aria-busy', 'false');
 
   grid.innerHTML = modelMeta
     .map(
@@ -427,14 +903,58 @@ async function renderModels() {
   }
 }
 
+function renderHomeModels() {
+  const grid = $('#homeModelsGrid');
+  if (!grid) return;
+  if (!modelMeta.length) {
+    grid.innerHTML = '<p class="home-model-empty">The spatial library is waiting for its first study.</p>';
+    grid.setAttribute('aria-busy', 'false');
+    return;
+  }
+  grid.innerHTML = modelMeta.slice(0, 3).map((m, i) => `<article class="home-model-card" data-model-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="View ${escapeHtml(m.title)}">
+    <div class="home-model-visual"><span>${String(i + 1).padStart(2, '0')}</span><div class="home-model-fallback">Loading model…</div><model-viewer id="home-mv-${escapeHtml(m.id)}" auto-rotate interaction-prompt="none" shadow-intensity="0.7" exposure="1" style="display:none"></model-viewer></div>
+    <div><h3>${escapeHtml(m.title)}</h3><p>${escapeHtml(m.note || 'A piece kept in the round.')}</p></div><b>↗</b>
+  </article>`).join('');
+  grid.setAttribute('aria-busy', 'false');
+  hydrateHomeModels();
+}
+
+async function hydrateHomeModels() {
+  const grid = $('#homeModelsGrid');
+  if (!grid) return;
+  for (const meta of modelMeta.slice(0, 3)) {
+    const viewer = $(`#home-mv-${meta.id}`);
+    const fallback = viewer?.previousElementSibling;
+    if (!viewer) continue;
+    try {
+      let url = modelObjectUrls.get(meta.id);
+      if (!url) {
+        const record = await getModelBlob(meta.id);
+        if (!record?.blob) throw new Error('missing');
+        url = createObjectUrl(record.blob);
+        modelObjectUrls.set(meta.id, url);
+      }
+      viewer.src = url;
+      viewer.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+    } catch {
+      if (fallback) fallback.textContent = 'Model unavailable.';
+    }
+  }
+}
+
 let activeModelId = null;
 
 function syncModelDownloadUi() {
   const downloadBtn = $('#modelDownloadBtn');
   const hint = $('#modelDownloadHint');
-  const loggedIn = isLoggedIn();
-  if (downloadBtn) downloadBtn.hidden = !loggedIn || !activeModelId;
-  if (hint) hint.hidden = loggedIn || !activeModelId;
+  if (downloadBtn) downloadBtn.hidden = !activeModelId;
+  if (hint) {
+    hint.hidden = !activeModelId || canDownload();
+    hint.innerHTML = canDownload()
+      ? ''
+      : 'Log in required — <a href="#login">Log in</a> or <a href="#signup">Sign up</a> to download.';
+  }
 }
 
 async function openModelDetail(id) {
@@ -449,6 +969,7 @@ async function openModelDetail(id) {
   const ext = (meta.filename || '').split('.').pop()?.toUpperCase() || 'GLB';
   $('#modelDetailFile').textContent = `.${ext.toLowerCase()}`;
   $('#modelDetailCrumb').textContent = `ATHAR'S SHELF / 3D · ${meta.title.toUpperCase()}`;
+  renderRelatedModels(id);
   syncModelDownloadUi();
 
   const viewer = $('#modelDetailViewer');
@@ -478,6 +999,43 @@ async function openModelDetail(id) {
   document.body.style.overflow = 'hidden';
 }
 
+function renderRelatedModels(activeId) {
+  const grid = $('#relatedModelsGrid');
+  if (!grid) return;
+  const related = modelMeta.filter((m) => m.id !== activeId).slice(0, 3);
+  if (!related.length) {
+    grid.innerHTML = '<p class="model-related-empty">Add more models to build out the spatial library.</p>';
+    return;
+  }
+  grid.innerHTML = related.map((m, i) => `<article class="related-model-card" data-model-id="${escapeHtml(m.id)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(m.title)}">
+    <div><span>${String(i + 1).padStart(2, '0')}</span><div class="related-model-fallback">Loading model…</div><model-viewer id="related-mv-${escapeHtml(m.id)}" auto-rotate interaction-prompt="none" shadow-intensity="0.6" exposure="1" style="display:none"></model-viewer></div>
+    <h4>${escapeHtml(m.title)}</h4><p>${escapeHtml(m.note || 'A piece kept in the round.')}</p><b>↗</b>
+  </article>`).join('');
+  hydrateRelatedModels(related);
+}
+
+async function hydrateRelatedModels(models) {
+  for (const meta of models) {
+    const viewer = $(`#related-mv-${meta.id}`);
+    const fallback = viewer?.previousElementSibling;
+    if (!viewer) continue;
+    try {
+      let url = modelObjectUrls.get(meta.id);
+      if (!url) {
+        const record = await getModelBlob(meta.id);
+        if (!record?.blob) throw new Error('missing');
+        url = createObjectUrl(record.blob);
+        modelObjectUrls.set(meta.id, url);
+      }
+      viewer.src = url;
+      viewer.style.display = 'block';
+      if (fallback) fallback.style.display = 'none';
+    } catch {
+      if (fallback) fallback.textContent = 'Model unavailable.';
+    }
+  }
+}
+
 function closeModelDetail() {
   activeModelId = null;
   $('#modelDetail').classList.remove('show');
@@ -486,8 +1044,12 @@ function closeModelDetail() {
   syncModelDownloadUi();
 }
 
-async function downloadActiveModel() {
-  if (!isLoggedIn() || !activeModelId) return;
+async function downloadActiveModel(skipAuthCheck = false) {
+  if (!activeModelId) return;
+  if (!skipAuthCheck && !canDownload()) {
+    requireDownloadAuth('model', { id: activeModelId });
+    return;
+  }
   const meta = modelMeta.find((m) => m.id === activeModelId);
   if (!meta) return;
   try {
@@ -534,6 +1096,9 @@ function openDetail(index) {
   heroImg.style.objectPosition = look.imagePosition;
   $('#detailDescription').textContent = s.description;
   $('#detailIndex').textContent = String(index + 1).padStart(2, '0');
+  $('#detailArchiveIndex').textContent = `ARCHIVE / ${String(index + 1).padStart(2, '0')}`;
+  $('#detailFormat').textContent = `${categoryLabel(s.category)} website`;
+  $('#detailEntry').textContent = `${String(index + 1).padStart(2, '0')} / ${String(sites.length).padStart(2, '0')}`;
   $('#detailVisit').href = s.url;
   $('#detailUrl').href = s.url;
   $('#detailUrl').textContent = s.url.replace(/^https?:\/\//, '');
@@ -686,14 +1251,16 @@ function refreshPreview() {
 }
 
 function showLoginError(message) {
-  const note = $('#loginNote');
+  const note = $('#memberLoginNote');
+  if (!note) return;
   note.textContent = message;
   note.classList.add('error');
 }
 
 function clearLoginError() {
-  const note = $('#loginNote');
-  note.textContent = 'Owner access only.';
+  const note = $('#memberLoginNote');
+  if (!note) return;
+  note.textContent = 'Members and owner use the same door.';
   note.classList.remove('error');
 }
 
@@ -721,24 +1288,65 @@ $('#sortBtn').onclick = () => {
 
 window.addEventListener('scroll', () => {
   $('.reading-line').style.width = `${(scrollY / (document.body.scrollHeight - innerHeight)) * 100}%`;
+  document.documentElement.style.setProperty('--parallax', `${Math.min(scrollY * .08, 56)}px`);
+  document.querySelectorAll('.home-site-grid .site-card[data-depth]').forEach((card) => {
+    const offset = (window.innerHeight - card.getBoundingClientRect().top) * Number(card.dataset.depth) * .018;
+    card.style.setProperty('--card-parallax', `${Math.max(-20, Math.min(offset, 42))}px`);
+  });
 });
 
-$('#jumpContact').onclick = () => $('#contact').scrollIntoView({ behavior: 'smooth' });
+$('#jumpContact').onclick = () => {
+  window.setTimeout(() => $('#contact').scrollIntoView({ behavior: 'smooth' }), 30);
+};
+
+function setActivePage() {
+  const requested = window.location.hash.replace('#', '');
+  if ((requested === 'login' || requested === 'signup') && (isAdmin() || isMember()) && !pendingDownload) {
+    window.location.hash = 'home';
+    return;
+  }
+  const page = ['discover', 'ideas', 'models', 'login', 'signup'].includes(requested) ? requested : 'home';
+  document.querySelectorAll('.page-view').forEach((view) => view.classList.toggle('is-active', view.dataset.page === page));
+  document.querySelectorAll('[data-route]').forEach((link) => link.classList.toggle('is-active', link.dataset.route === page));
+
+  if (requested === 'creator' || requested === 'contact') {
+    window.setTimeout(() => {
+      document.getElementById(requested)?.scrollIntoView({ behavior: 'smooth' });
+    }, 40);
+  } else {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
 
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     $('#search').focus();
   } else if (e.key === 'Escape') {
-    if ($('#modelDetail')?.classList.contains('show')) closeModelDetail();
+    if ($('#ideaSidePanel')?.classList.contains('is-open')) closeIdeaPanel();
+    else if ($('#ideaLightbox')?.classList.contains('show')) closeIdea();
+    else if ($('#modelDetail')?.classList.contains('show')) closeModelDetail();
     else closeDetail();
-    $('#loginModal').classList.remove('show');
+    closeDashboard();
   }
 });
 
 $('#modelsGrid').onclick = (e) => {
   const card = e.target.closest('.model-card');
   if (card?.dataset.modelId) openModelDetail(card.dataset.modelId);
+};
+
+$('#homeModelsGrid').onclick = (e) => {
+  const card = e.target.closest('.home-model-card');
+  if (card?.dataset.modelId) openModelDetail(card.dataset.modelId);
+};
+
+$('#homeModelsGrid').onkeydown = (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.home-model-card');
+  if (!card?.dataset.modelId) return;
+  e.preventDefault();
+  openModelDetail(card.dataset.modelId);
 };
 
 $('#modelsGrid').onkeydown = (e) => {
@@ -750,11 +1358,81 @@ $('#modelsGrid').onkeydown = (e) => {
 };
 
 $('#modelDetailClose').onclick = closeModelDetail;
-$('#modelDownloadBtn').onclick = downloadActiveModel;
+$('#modelDownloadBtn').onclick = () => downloadActiveModel();
+$('#modelDownloadHint')?.addEventListener('click', (e) => {
+  const link = e.target.closest('a[href="#login"], a[href="#signup"]');
+  if (!link || !activeModelId) return;
+  pendingDownload = { kind: 'model', id: activeModelId };
+  closeModelDetail();
+});
+
+$('#relatedModelsGrid').onclick = (e) => {
+  const card = e.target.closest('.related-model-card');
+  if (card?.dataset.modelId) openModelDetail(card.dataset.modelId);
+};
+
+$('#relatedModelsGrid').onkeydown = (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.related-model-card');
+  if (!card?.dataset.modelId) return;
+  e.preventDefault();
+  openModelDetail(card.dataset.modelId);
+};
 
 $('#siteGrid').onclick = (e) => {
   const card = e.target.closest('.site-card');
   if (card) openDetail(Number(card.dataset.siteIndex));
+};
+
+$('#ideasWall').onclick = (e) => {
+  const pin = e.target.closest('.idea-pin');
+  if (pin) openIdea(Number(pin.dataset.ideaIndex));
+};
+$('#ideasWall').onkeydown = (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const pin = e.target.closest('.idea-pin');
+  if (!pin) return;
+  e.preventDefault();
+  openIdea(Number(pin.dataset.ideaIndex));
+};
+$('#ideaLightboxClose').onclick = closeIdea;
+$('#ideaLightbox').onclick = (e) => {
+  if (e.target === $('#ideaLightbox') || e.target === $('.idea-lightbox-stage')) closeIdea();
+};
+$('#ideaPanelOpen')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openIdeaPanel();
+});
+$('#ideaPanelClose')?.addEventListener('click', closeIdeaPanel);
+$('#ideaDownloadBtn').onclick = () => downloadActiveIdea();
+$('#ideaLikeBtn')?.addEventListener('click', toggleIdeaLike);
+$('#ideaCommentForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = String(new FormData(e.target).get('comment') || '').trim();
+  if (!text) return;
+  if (postIdeaComment(text)) e.target.reset();
+});
+$('#ideaDownloadHint')?.addEventListener('click', (e) => {
+  const link = e.target.closest('a[href="#login"], a[href="#signup"]');
+  if (!link || activeIdeaIndex === null) return;
+  pendingDownload = { kind: 'idea', index: activeIdeaIndex };
+  closeIdea();
+});
+$('#ideaSidePanel')?.addEventListener('click', (e) => e.stopPropagation());
+$('#ideaPanelOpen')?.addEventListener('keydown', (e) => e.stopPropagation());
+
+
+$('#homeSiteGrid').onclick = (e) => {
+  const card = e.target.closest('.site-card');
+  if (card) openDetail(Number(card.dataset.siteIndex));
+};
+
+$('#homeSiteGrid').onkeydown = (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const card = e.target.closest('.site-card');
+  if (!card) return;
+  e.preventDefault();
+  openDetail(Number(card.dataset.siteIndex));
 };
 
 $('#detailClose').onclick = closeDetail;
@@ -805,45 +1483,116 @@ $('#siteDetail').onclick = (e) => {
   }
 };
 
-const modal = $('#loginModal');
 const dashboard = $('#dashboard');
 
-$('#loginBtn').onclick = () => {
-  if (isLoggedIn()) {
-    openDashboard();
-    return;
-  }
-  clearLoginError();
-  modal.classList.add('show');
-};
-
-$('[data-close]').onclick = () => modal.classList.remove('show');
-
-$('#loginForm').onsubmit = (e) => {
-  e.preventDefault();
-  const data = Object.fromEntries(new FormData(e.target));
-  if (
-    data.email.trim().toLowerCase() !== ADMIN.email.toLowerCase() ||
-    data.password !== ADMIN.password
-  ) {
-    showLoginError('Wrong email or password.');
-    return;
-  }
-  setLoggedIn(true);
-  clearLoginError();
-  e.target.reset();
-  modal.classList.remove('show');
-  syncModelDownloadUi();
+function loginAsAdmin() {
+  setAdmin(true);
+  setMemberSession({ name: 'Athar Iqbal', email: ADMIN.email });
+  syncAccountUi();
+  window.location.hash = 'home';
   openDashboard();
-};
+}
+
+$('#navAdmin')?.addEventListener('click', () => {
+  if (!isAdmin()) {
+    window.location.hash = 'login';
+    return;
+  }
+  openDashboard();
+});
+
+$('#memberLoginForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const note = $('#memberLoginNote');
+  const data = Object.fromEntries(new FormData(e.target));
+  const email = data.email.trim().toLowerCase();
+  const password = data.password;
+
+  if (email === ADMIN.email.toLowerCase() && password === ADMIN.password) {
+    if (note) {
+      note.textContent = 'Welcome back, Athar.';
+      note.classList.remove('error');
+    }
+    e.target.reset();
+    loginAsAdmin();
+    return;
+  }
+
+  const user = getUsers().find((u) => u.email === email);
+  if (!user || user.password !== password) {
+    if (note) {
+      note.textContent = 'Wrong email or password.';
+      note.classList.add('error');
+    }
+    return;
+  }
+  setAdmin(false);
+  setMemberSession(user);
+  if (note) {
+    note.textContent = 'Logged in.';
+    note.classList.remove('error');
+  }
+  e.target.reset();
+  syncAccountUi();
+  const job = pendingDownload;
+  await resumePendingDownload();
+  if (!job) window.location.hash = 'home';
+});
+
+$('#memberSignupForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const note = $('#memberSignupNote');
+  const data = Object.fromEntries(new FormData(e.target));
+  const email = data.email.trim().toLowerCase();
+  const name = data.name.trim();
+  const password = data.password;
+  if (email === ADMIN.email.toLowerCase()) {
+    note.textContent = 'That email is reserved. Log in instead.';
+    note.classList.add('error');
+    return;
+  }
+  if (password.length < 6) {
+    note.textContent = 'Use at least 6 characters for your password.';
+    note.classList.add('error');
+    return;
+  }
+  const users = getUsers();
+  if (users.some((u) => u.email === email)) {
+    note.textContent = 'That email already has an account. Log in instead.';
+    note.classList.add('error');
+    return;
+  }
+  const user = { name, email, password, createdAt: Date.now() };
+  users.push(user);
+  saveUsers(users);
+  setMemberSession(user);
+  note.textContent = 'Account created.';
+  note.classList.remove('error');
+  e.target.reset();
+  syncAccountUi();
+  const job = pendingDownload;
+  await resumePendingDownload();
+  if (!job) window.location.hash = 'home';
+});
+
+$('#memberSignOut')?.addEventListener('click', () => {
+  setMemberSession(null);
+  setAdmin(false);
+  pendingDownload = null;
+  closeDashboard();
+  syncAccountUi();
+  window.location.hash = 'home';
+});
 
 $('#dashClose').onclick = closeDashboard;
 
 $('#signout').onclick = () => {
-  setLoggedIn(false);
+  setAdmin(false);
+  setMemberSession(null);
   closeDashboard();
   resetEditor();
-  syncModelDownloadUi();
+  syncAccountUi();
+  window.location.hash = 'home';
 };
 
 document.querySelectorAll('.dash-link').forEach((b) => {
@@ -1032,6 +1781,96 @@ $('#categoryList').onclick = (e) => {
   renderDash();
 };
 
+$('#ideaUpload')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  const status = $('#ideaUploadStatus');
+  if (!file) return;
+  try {
+    draftIdeaImage = await readFileAsDataUrl(file, 1600, 0.85);
+    syncIdeaUploadUi();
+  } catch (err) {
+    draftIdeaImage = '';
+    syncIdeaUploadUi();
+    if (status) status.textContent = err.message || 'Could not use that image.';
+  }
+});
+
+$('#clearIdeaUpload')?.addEventListener('click', () => {
+  clearIdeaDraft();
+  const form = $('#ideaForm');
+  if (form?.elements.image) form.elements.image.value = '';
+});
+
+$('#ideaForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!isAdmin()) return;
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const image = draftIdeaImage || String(data.image || '').trim();
+  const status = $('#ideaStatus');
+  if (!image) {
+    status.textContent = 'Upload an image or paste an image URL.';
+    return;
+  }
+  const access = data.access === 'paid' ? 'paid' : 'free';
+  const idea = {
+    id: `idea-${Date.now()}`,
+    title: String(data.title || '').trim(),
+    type: String(data.type || '').trim(),
+    access,
+    price: access === 'paid' ? Number(data.price) || 0 : undefined,
+    image,
+    createdAt: Date.now(),
+  };
+  ideas.unshift(idea);
+  try {
+    saveIdeas();
+  } catch {
+    ideas.shift();
+    status.textContent = 'Image is too large for browser storage. Try a smaller file.';
+    return;
+  }
+  form.reset();
+  clearIdeaDraft();
+  status.textContent = 'Idea published to the pinboard.';
+  renderIdeas();
+  renderDash();
+});
+
+$('#ideaManageList')?.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-remove-idea]');
+  if (!button || !isAdmin()) return;
+  const index = Number(button.dataset.removeIdea);
+  if (!Number.isInteger(index) || !ideas[index]) return;
+  if (!confirm(`Remove “${ideas[index].title}” from the pinboard?`)) return;
+  const [removed] = ideas.splice(index, 1);
+  const notes = getIdeaNotes();
+  if (removed?.id && notes[removed.id]) {
+    delete notes[removed.id];
+    saveIdeaNotes(notes);
+  }
+  saveIdeas();
+  renderIdeas();
+  renderDash();
+});
+
+$('#userManageList')?.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-remove-user]');
+  if (!button || !isAdmin()) return;
+  const index = Number(button.dataset.removeUser);
+  const users = getUsers();
+  if (!Number.isInteger(index) || !users[index]) return;
+  if (!confirm(`Remove member “${users[index].email}”?`)) return;
+  const [removed] = users.splice(index, 1);
+  saveUsers(users);
+  const session = getMemberSession();
+  if (session?.email && removed?.email === session.email) {
+    setMemberSession(null);
+    syncAccountUi();
+  }
+  renderDash();
+});
+
 $('#modelUpload').onchange = (e) => {
   const file = e.target.files?.[0];
   $('#modelFileName').textContent = file ? file.name : 'No file chosen.';
@@ -1074,6 +1913,7 @@ $('#modelForm').onsubmit = async (e) => {
     status.textContent = 'Model published to the shelf.';
     renderDash();
     await renderModels();
+    renderHomeModels();
   } catch {
     status.textContent = 'Could not save that model. Try a smaller file.';
   }
@@ -1096,6 +1936,7 @@ $('#modelManageList').onclick = async (e) => {
   }
   renderDash();
   await renderModels();
+  renderHomeModels();
 };
 
 $('#contactForm').onsubmit = (e) => {
@@ -1110,9 +1951,15 @@ $('#contactForm').onsubmit = (e) => {
 renderFilters();
 renderCategorySelect();
 renderSites();
-renderDash();
 renderModels();
+renderHomeModels();
+renderIdeas();
+renderDash();
 syncCoverUploadUi();
 renderGalleryUploads();
 refreshPreview();
 syncModelDownloadUi();
+syncAccountUi();
+
+window.addEventListener('hashchange', setActivePage);
+setActivePage();
