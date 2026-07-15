@@ -109,6 +109,74 @@ const ideaQualityMap = {
   print: { w: 2400, q: 90, label: 'print' },
 };
 
+const defaultModels = [
+  {
+    id: 'sample-astronaut',
+    title: 'Astronaut study',
+    note: 'A classic spatial reference — orbit, light, and clean silhouette.',
+    filename: 'Astronaut.glb',
+    src: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+    createdAt: Date.now() - 86400000 * 3,
+    sample: true,
+  },
+  {
+    id: 'sample-robot',
+    title: 'Robot expressive',
+    note: 'Character form in the round — useful when you need presence, not polish.',
+    filename: 'RobotExpressive.glb',
+    src: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb',
+    createdAt: Date.now() - 86400000 * 2,
+    sample: true,
+  },
+  {
+    id: 'sample-armstrong',
+    title: 'Neil Armstrong',
+    note: 'Figure study with a clear silhouette — good for scale and framing.',
+    filename: 'NeilArmstrong.glb',
+    src: 'https://modelviewer.dev/shared-assets/models/NeilArmstrong.glb',
+    createdAt: Date.now() - 86400000,
+    sample: true,
+  },
+];
+
+function ensureSampleModels(list) {
+  let current = Array.isArray(list) ? [...list] : [];
+  if (!current.length) {
+    setModelMeta(defaultModels);
+    return [...defaultModels];
+  }
+
+  const replacements = {
+    'sample-chair': 'sample-armstrong',
+    'sample-helmet': 'sample-armstrong',
+  };
+  let changed = false;
+  current = current.map((model) => {
+    const nextId = replacements[model.id];
+    if (!nextId) return model;
+    const sample = defaultModels.find((item) => item.id === nextId);
+    if (!sample) return model;
+    changed = true;
+    return { ...sample };
+  });
+
+  const ids = new Set(current.map((m) => m.id));
+  for (const sample of defaultModels) {
+    const existing = current.find((m) => m.id === sample.id);
+    if (existing?.sample && existing.src !== sample.src) {
+      Object.assign(existing, sample);
+      changed = true;
+    } else if (!ids.has(sample.id) && current.every((m) => m.sample)) {
+      current.push({ ...sample });
+      ids.add(sample.id);
+      changed = true;
+    }
+  }
+
+  if (changed) setModelMeta(current);
+  return current;
+}
+
 const ideaSeedNotes = {
   'late-afternoon': {
     likes: 12,
@@ -152,8 +220,19 @@ let reverse = false;
 let editingSiteIndex = null;
 let draftCover = '';
 let draftGallery = [];
-let modelMeta = getModelMeta();
+let modelMeta = ensureSampleModels(getModelMeta());
 const modelObjectUrls = new Map();
+
+async function resolveModelUrl(meta) {
+  if (!meta) return null;
+  if (meta.src) return meta.src;
+  if (modelObjectUrls.has(meta.id)) return modelObjectUrls.get(meta.id);
+  const record = await getModelBlob(meta.id);
+  if (!record?.blob) return null;
+  const url = createObjectUrl(record.blob);
+  modelObjectUrls.set(meta.id, url);
+  return url;
+}
 
 const defaultCategories = [
   { id: 'studio', label: 'Studios' },
@@ -341,6 +420,13 @@ function canDownload() {
   return isAdmin() || isMember();
 }
 
+function canDownloadIdea(idea) {
+  if (!idea) return false;
+  if (isAdmin()) return true;
+  if (!isMember()) return false;
+  return idea.access !== 'paid';
+}
+
 /** @deprecated use isAdmin — kept for fewer churn points during migration */
 function isLoggedIn() {
   return isAdmin();
@@ -405,7 +491,8 @@ async function resumePendingDownload() {
   } else if (job.kind === 'idea' && Number.isInteger(job.index)) {
     window.location.hash = 'ideas';
     openIdea(job.index);
-    await downloadActiveIdea(true);
+    const idea = ideas[job.index];
+    if (canDownloadIdea(idea)) await downloadActiveIdea(true);
   }
 }
 
@@ -542,7 +629,7 @@ function renderIdeaAccess(idea) {
   const el = $('#ideaPanelAccess');
   if (!el || !idea) return;
   if (idea.access === 'paid') {
-    el.innerHTML = `<span class="idea-access paid">Paid pin</span><p>High-res download · $${idea.price || 4}. Free with a shelf account.</p>`;
+    el.innerHTML = `<span class="idea-access paid">Paid pin</span><p>High-res download · $${idea.price || 4}. Members can preview; full download stays with Athar for now — <a href="#contact">send a request</a>.</p>`;
   } else {
     el.innerHTML = `<span class="idea-access free">Free pin</span><p>Open for members — pick a quality and download.</p>`;
   }
@@ -620,25 +707,53 @@ function closeIdea() {
 function syncIdeaDownloadUi() {
   const hint = $('#ideaDownloadHint');
   const btn = $('#ideaDownloadBtn');
+  const quality = $('#ideaQuality');
   if (!btn) return;
   const open = activeIdeaIndex !== null;
+  const idea = open ? ideas[activeIdeaIndex] : null;
+  const allowed = canDownloadIdea(idea);
   btn.hidden = !open;
+  btn.disabled = false;
+  if (quality) quality.hidden = !open || (idea?.access === 'paid' && !isAdmin());
   if (hint) {
-    hint.hidden = !open || canDownload();
-    hint.innerHTML = canDownload()
-      ? ''
-      : 'Log in required — <a href="#login">Log in</a> or <a href="#signup">Sign up</a> to download.';
+    if (!open || allowed) {
+      hint.hidden = true;
+      hint.innerHTML = '';
+    } else if (!canDownload()) {
+      hint.hidden = false;
+      hint.innerHTML = 'Log in required — <a href="#login">Log in</a> or <a href="#signup">Sign up</a> to download free pins.';
+    } else {
+      hint.hidden = false;
+      hint.innerHTML = 'Paid pin — <a href="#contact">request access</a> from Athar. Preview viewing stays open.';
+    }
+  }
+  if (btn && idea?.access === 'paid' && canDownload() && !isAdmin()) {
+    btn.innerHTML = 'Request access <span>↗</span>';
+  } else if (btn) {
+    btn.innerHTML = 'Download image <span>↓</span>';
   }
 }
 
 async function downloadActiveIdea(skipAuthCheck = false) {
   if (activeIdeaIndex === null) return;
+  const idea = ideas[activeIdeaIndex];
+  if (!idea) return;
+
   if (!skipAuthCheck && !canDownload()) {
     requireDownloadAuth('idea', { index: activeIdeaIndex });
     return;
   }
-  const idea = ideas[activeIdeaIndex];
-  if (!idea) return;
+
+  if (!canDownloadIdea(idea)) {
+    closeIdea();
+    window.location.hash = 'contact';
+    const status = $('#formStatus');
+    if (status) {
+      status.textContent = `Request access to “${idea.title}” (paid pin · $${idea.price || 4}).`;
+    }
+    return;
+  }
+
   const quality = selectedIdeaQuality();
   const preset = ideaQualityMap[quality] || ideaQualityMap.high;
   const src = ideaQualityUrl(idea.image, quality);
@@ -841,7 +956,7 @@ function renderModelManageList() {
     modelMeta
       .map(
         (m, i) =>
-          `<div class="manage-item"><div><h3>${escapeHtml(m.title)}</h3><p>${escapeHtml(m.filename || '3D model')}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</p></div><button type="button" class="delete" data-remove-model="${escapeHtml(m.id)}">Remove</button></div>`
+          `<div class="manage-item"><div><h3>${escapeHtml(m.title)}</h3><p>${escapeHtml(m.filename || '3D model')}${m.size ? ` · ${formatFileSize(m.size)}` : ''}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</p></div><button type="button" class="delete" data-remove-model="${escapeHtml(m.id)}">Remove</button></div>`
       )
       .join('') || '<p>No 3D models yet.</p>';
 }
@@ -878,17 +993,12 @@ async function renderModels() {
 
   for (const meta of modelMeta) {
     try {
-      const record = await getModelBlob(meta.id);
-      if (!record?.blob) {
+      const url = await resolveModelUrl(meta);
+      if (!url) {
         const card = grid.querySelector(`[data-model-id="${meta.id}"] .model-fallback`);
         if (card) card.textContent = 'Model file missing.';
         continue;
       }
-      if (modelObjectUrls.has(meta.id)) {
-        URL.revokeObjectURL(modelObjectUrls.get(meta.id));
-      }
-      const url = createObjectUrl(record.blob);
-      modelObjectUrls.set(meta.id, url);
       const viewer = $(`#mv-${meta.id}`);
       const fallback = viewer?.previousElementSibling;
       if (viewer) {
@@ -927,13 +1037,8 @@ async function hydrateHomeModels() {
     const fallback = viewer?.previousElementSibling;
     if (!viewer) continue;
     try {
-      let url = modelObjectUrls.get(meta.id);
-      if (!url) {
-        const record = await getModelBlob(meta.id);
-        if (!record?.blob) throw new Error('missing');
-        url = createObjectUrl(record.blob);
-        modelObjectUrls.set(meta.id, url);
-      }
+      const url = await resolveModelUrl(meta);
+      if (!url) throw new Error('missing');
       viewer.src = url;
       viewer.style.display = 'block';
       if (fallback) fallback.style.display = 'none';
@@ -979,13 +1084,8 @@ async function openModelDetail(id) {
   viewer.style.display = 'none';
 
   try {
-    let url = modelObjectUrls.get(id);
-    if (!url) {
-      const record = await getModelBlob(id);
-      if (!record?.blob) throw new Error('missing');
-      url = createObjectUrl(record.blob);
-      modelObjectUrls.set(id, url);
-    }
+    const url = await resolveModelUrl(meta);
+    if (!url) throw new Error('missing');
     viewer.src = url;
     viewer.style.display = 'block';
     fallback.style.display = 'none';
@@ -1020,13 +1120,8 @@ async function hydrateRelatedModels(models) {
     const fallback = viewer?.previousElementSibling;
     if (!viewer) continue;
     try {
-      let url = modelObjectUrls.get(meta.id);
-      if (!url) {
-        const record = await getModelBlob(meta.id);
-        if (!record?.blob) throw new Error('missing');
-        url = createObjectUrl(record.blob);
-        modelObjectUrls.set(meta.id, url);
-      }
+      const url = await resolveModelUrl(meta);
+      if (!url) throw new Error('missing');
       viewer.src = url;
       viewer.style.display = 'block';
       if (fallback) fallback.style.display = 'none';
@@ -1053,18 +1148,27 @@ async function downloadActiveModel(skipAuthCheck = false) {
   const meta = modelMeta.find((m) => m.id === activeModelId);
   if (!meta) return;
   try {
-    const record = await getModelBlob(activeModelId);
-    if (!record?.blob) return;
-    const url = createObjectUrl(record.blob);
+    let blob = null;
+    let filename = meta.filename || `${meta.title.replace(/\s+/g, '-').toLowerCase()}.glb`;
+    if (meta.src) {
+      const response = await fetch(meta.src);
+      blob = await response.blob();
+    } else {
+      const record = await getModelBlob(activeModelId);
+      if (!record?.blob) return;
+      blob = record.blob;
+      filename = record.filename || filename;
+    }
+    const url = createObjectUrl(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = meta.filename || `${meta.title.replace(/\s+/g, '-').toLowerCase()}.glb`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   } catch {
-    /* ignore */
+    if (meta.src) window.open(meta.src, '_blank', 'noopener');
   }
 }
 
@@ -1296,8 +1400,24 @@ window.addEventListener('scroll', () => {
 });
 
 $('#jumpContact').onclick = () => {
-  window.setTimeout(() => $('#contact').scrollIntoView({ behavior: 'smooth' }), 30);
+  if (window.location.hash === '#contact') {
+    $('#contact')?.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  window.location.hash = 'contact';
 };
+
+function closeOverlaysForRoute() {
+  if ($('#ideaLightbox')?.classList.contains('show')) closeIdea();
+  if ($('#modelDetail')?.classList.contains('show')) closeModelDetail();
+  if ($('#siteDetail')?.classList.contains('show')) closeDetail();
+}
+
+function syncHeaderHeight() {
+  const header = document.querySelector('header');
+  if (!header) return;
+  document.documentElement.style.setProperty('--header-h', `${header.offsetHeight}px`);
+}
 
 function setActivePage() {
   const requested = window.location.hash.replace('#', '');
@@ -1305,9 +1425,17 @@ function setActivePage() {
     window.location.hash = 'home';
     return;
   }
+
+  closeOverlaysForRoute();
+
   const page = ['discover', 'ideas', 'models', 'login', 'signup'].includes(requested) ? requested : 'home';
+  document.body.dataset.page = page;
   document.querySelectorAll('.page-view').forEach((view) => view.classList.toggle('is-active', view.dataset.page === page));
   document.querySelectorAll('[data-route]').forEach((link) => link.classList.toggle('is-active', link.dataset.route === page));
+
+  // Force layout so the footer never keeps short-route height from a prior page.
+  void document.body.offsetHeight;
+  syncHeaderHeight();
 
   if (requested === 'creator' || requested === 'contact') {
     window.setTimeout(() => {
@@ -1871,9 +1999,21 @@ $('#userManageList')?.addEventListener('click', (e) => {
   renderDash();
 });
 
+const MODEL_MAX_BYTES = 150 * 1024 * 1024;
+
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
 $('#modelUpload').onchange = (e) => {
   const file = e.target.files?.[0];
-  $('#modelFileName').textContent = file ? file.name : 'No file chosen.';
+  if (!file) {
+    $('#modelFileName').textContent = 'No file chosen.';
+    return;
+  }
+  $('#modelFileName').textContent = `${file.name} · ${formatFileSize(file.size)}`;
 };
 
 $('#modelForm').onsubmit = async (e) => {
@@ -1891,12 +2031,12 @@ $('#modelForm').onsubmit = async (e) => {
     status.textContent = 'Please upload a .glb or .gltf model.';
     return;
   }
-  if (file.size > 40 * 1024 * 1024) {
-    status.textContent = 'Model is too large (max about 40MB).';
+  if (file.size > MODEL_MAX_BYTES) {
+    status.textContent = `Model is too large (max 150MB). This file is ${formatFileSize(file.size)}.`;
     return;
   }
 
-  status.textContent = 'Uploading…';
+  status.textContent = file.size > 20 * 1024 * 1024 ? 'Uploading large model… this can take a moment.' : 'Uploading…';
   const id = `model-${Date.now()}`;
   try {
     await saveModelBlob(id, file, file.name, file.type || 'model/gltf-binary');
@@ -1905,6 +2045,7 @@ $('#modelForm').onsubmit = async (e) => {
       title: String(data.title || '').trim(),
       note: String(data.note || '').trim(),
       filename: file.name,
+      size: file.size,
       createdAt: Date.now(),
     });
     setModelMeta(modelMeta);
@@ -1915,7 +2056,7 @@ $('#modelForm').onsubmit = async (e) => {
     await renderModels();
     renderHomeModels();
   } catch {
-    status.textContent = 'Could not save that model. Try a smaller file.';
+    status.textContent = 'Could not save that model. Try a smaller file, or free some browser storage.';
   }
 };
 
@@ -1962,4 +2103,6 @@ syncModelDownloadUi();
 syncAccountUi();
 
 window.addEventListener('hashchange', setActivePage);
+window.addEventListener('resize', syncHeaderHeight);
+syncHeaderHeight();
 setActivePage();
