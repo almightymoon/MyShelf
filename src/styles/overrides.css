@@ -12,15 +12,19 @@
   z-index: 40;
   background: #f7f6f4;
   overflow: auto;
+  display: none;
   opacity: 0;
   visibility: hidden;
   transform: translateY(18px);
+  pointer-events: none;
   transition: opacity .45s cubic-bezier(.16, 1, .3, 1), transform .45s cubic-bezier(.16, 1, .3, 1), visibility .45s;
 }
 .site-detail.show {
+  display: block;
   opacity: 1;
   visibility: visible;
   transform: none;
+  pointer-events: auto;
 }
 
 .detail-top {

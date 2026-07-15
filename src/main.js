@@ -1430,7 +1430,12 @@ function setActivePage() {
 
   const page = ['discover', 'ideas', 'models', 'login', 'signup'].includes(requested) ? requested : 'home';
   document.body.dataset.page = page;
-  document.querySelectorAll('.page-view').forEach((view) => view.classList.toggle('is-active', view.dataset.page === page));
+  document.querySelectorAll('.page-view').forEach((view) => {
+    const active = view.dataset.page === page;
+    view.classList.toggle('is-active', active);
+    view.hidden = !active;
+    view.setAttribute('aria-hidden', active ? 'false' : 'true');
+  });
   document.querySelectorAll('[data-route]').forEach((link) => link.classList.toggle('is-active', link.dataset.route === page));
 
   // Force layout so the footer never keeps short-route height from a prior page.
