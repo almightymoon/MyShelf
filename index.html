@@ -321,43 +321,56 @@
         </form>
         <div id="ideaManageList"></div>
       </div>
-      <div id="modelsAdmin" class="panel">
-        <p class="eyebrow">SPATIAL WORK</p>
-        <h2>3D models.</h2>
+      <div id="modelsAdmin" class="panel models-admin-panel">
+        <header class="models-admin-head">
+          <div>
+            <p class="eyebrow">SPATIAL WORK</p>
+            <h2>3D models.</h2>
+          </div>
+          <p class="models-admin-lead">Compose on the left. Preview, edit, or remove live pieces on the right.</p>
+        </header>
         <div class="models-admin-layout">
           <div class="models-admin-compose">
-            <form id="modelForm" class="model-form">
-              <label>Model name<input name="title" required placeholder="e.g. Soft chair study"></label>
-              <label>Short note<textarea name="note" rows="3" placeholder="What this model is, or why it’s here"></textarea></label>
-              <div class="media-field">
-                <span class="media-label">Model file <small id="modelFileHint">(.glb or .gltf · up to 300MB on VPS)</small></span>
-                <div class="upload-row">
-                  <label class="upload-btn">
-                    <span id="modelUploadLabel">Upload model</span>
+            <div class="models-compose-card">
+              <p class="models-compose-kicker" id="modelFormKicker">New model</p>
+              <form id="modelForm" class="model-form">
+                <label>Model name<input name="title" required placeholder="e.g. Soft chair study" autocomplete="off"></label>
+                <label>Short note<textarea name="note" rows="3" placeholder="What this model is, or why it’s here"></textarea></label>
+                <div class="media-field model-drop-field">
+                  <span class="media-label">Model file <small id="modelFileHint">(.glb or .gltf · up to 300MB)</small></span>
+                  <label class="model-dropzone" id="modelDropzone" for="modelUpload">
                     <input id="modelUpload" name="modelFile" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden>
+                    <span class="model-dropzone-mark" aria-hidden="true">✦</span>
+                    <span class="model-dropzone-title" id="modelUploadLabel">Drop a model here, or browse</span>
+                    <span class="model-dropzone-sub">GLB / GLTF · stays on your VPS</span>
                   </label>
+                  <p class="model-file-name" id="modelFileName">No file chosen.</p>
                 </div>
-                <p class="model-file-name" id="modelFileName">No file chosen.</p>
-              </div>
-              <button type="submit" id="modelSubmitBtn">Publish model <span>↗</span></button>
-              <button type="button" class="model-cancel-edit" id="modelCancelEdit" hidden>Cancel edit</button>
-              <div class="model-upload-progress" id="modelUploadProgress" hidden>
-                <div class="model-upload-orbit" aria-hidden="true">
-                  <i></i><i></i><i></i>
+                <div class="model-form-actions">
+                  <button type="submit" id="modelSubmitBtn">Publish model <span>↗</span></button>
+                  <button type="button" class="model-cancel-edit" id="modelCancelEdit" hidden>Cancel edit</button>
                 </div>
-                <div class="model-upload-copy">
-                  <strong id="modelUploadStage">Uploading model…</strong>
-                  <span id="modelUploadPercent">0%</span>
+                <div class="model-upload-progress" id="modelUploadProgress" hidden>
+                  <div class="model-upload-orbit" aria-hidden="true">
+                    <i></i><i></i><i></i>
+                  </div>
+                  <div class="model-upload-copy">
+                    <strong id="modelUploadStage">Uploading model…</strong>
+                    <span id="modelUploadPercent">0%</span>
+                  </div>
+                  <div class="model-upload-track" aria-hidden="true"><b id="modelUploadBar"></b></div>
                 </div>
-                <div class="model-upload-track" aria-hidden="true"><b id="modelUploadBar"></b></div>
-              </div>
-              <p class="form-status" id="modelStatus"></p>
-            </form>
+                <p class="form-status" id="modelStatus"></p>
+              </form>
+            </div>
           </div>
           <aside class="models-admin-library" aria-label="Published models">
             <div class="models-library-head">
-              <p class="eyebrow">ON THE SHELF</p>
-              <h3>Library</h3>
+              <div>
+                <p class="eyebrow">ON THE SHELF</p>
+                <h3>Library</h3>
+              </div>
+              <span class="models-library-count" id="modelLibraryCount">0</span>
             </div>
             <div id="modelManageList"></div>
           </aside>

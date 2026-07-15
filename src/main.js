@@ -1021,12 +1021,15 @@ function clearIdeaDraft() {
 function renderModelManageList() {
   const list = $('#modelManageList');
   if (!list) return;
+  const countEl = $('#modelLibraryCount');
+  if (countEl) countEl.textContent = String(modelMeta.length).padStart(2, '0');
   list.innerHTML =
     modelMeta
       .map((m) => {
         const size = m.size ? formatFileSize(m.size) : '';
         const metaLine = [m.filename || '3D model', size].filter(Boolean).join(' · ');
-        return `<article class="model-manage-card" data-model-id="${escapeHtml(m.id)}">
+        const editing = editingModelId === m.id ? ' is-editing' : '';
+        return `<article class="model-manage-card${editing}" data-model-id="${escapeHtml(m.id)}">
           <div class="model-manage-thumb" aria-hidden="true">
             <span>GLB</span>
             <model-viewer id="admin-mv-${escapeHtml(m.id)}" auto-rotate interaction-prompt="none" shadow-intensity="0.4" exposure="1" style="display:none"></model-viewer>
@@ -1043,7 +1046,7 @@ function renderModelManageList() {
           </div>
         </article>`;
       })
-      .join('') || '<p class="models-library-empty">No models yet — publish one on the left.</p>';
+      .join('') || '<p class="models-library-empty">No models yet — publish one from the compose card.</p>';
 
   modelMeta.forEach(async (m) => {
     const viewer = document.getElementById(`admin-mv-${m.id}`);
@@ -1072,8 +1075,10 @@ function resetModelForm() {
   if ($('#modelFileName')) $('#modelFileName').textContent = 'No file chosen.';
   if ($('#modelSubmitBtn')) $('#modelSubmitBtn').innerHTML = 'Publish model <span>↗</span>';
   if ($('#modelCancelEdit')) $('#modelCancelEdit').hidden = true;
-  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Upload model';
+  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Drop a model here, or browse';
+  if ($('#modelFormKicker')) $('#modelFormKicker').textContent = 'New model';
   setModelUploadUi(false);
+  document.querySelectorAll('.model-manage-card.is-editing').forEach((el) => el.classList.remove('is-editing'));
 }
 
 function setModelUploadUi(active, stage = 'Uploading model…', percent = 0) {
@@ -1117,11 +1122,13 @@ function beginEditModel(id) {
   }
   if ($('#modelSubmitBtn')) $('#modelSubmitBtn').innerHTML = 'Save changes <span>↗</span>';
   if ($('#modelCancelEdit')) $('#modelCancelEdit').hidden = false;
-  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Replace model';
+  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Drop a replacement, or browse';
+  if ($('#modelFormKicker')) $('#modelFormKicker').textContent = 'Editing model';
   if ($('#modelStatus')) {
     $('#modelStatus').textContent = '';
     $('#modelStatus').classList.remove('error');
   }
+  renderModelManageList();
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -2373,25 +2380,60 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
-$('#modelUpload').onchange = (e) => {
-  const file = e.target.files?.[0];
+function applyChosenModelFile(file) {
+  const input = $('#modelUpload');
   const status = $('#modelStatus');
   if (!file) {
-    $('#modelFileName').textContent = editingModelId
-      ? 'Choose a file only if you want to replace the model.'
-      : 'No file chosen.';
+    if ($('#modelFileName')) {
+      $('#modelFileName').textContent = editingModelId
+        ? 'Choose a file only if you want to replace the model.'
+        : 'No file chosen.';
+    }
     return;
   }
-  $('#modelFileName').textContent = `${file.name} · ${formatFileSize(file.size)}`;
+  if (input) {
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+  }
+  if ($('#modelFileName')) $('#modelFileName').textContent = `${file.name} · ${formatFileSize(file.size)}`;
+  if ($('#modelUploadLabel')) {
+    $('#modelUploadLabel').textContent = editingModelId ? 'Replace selected — click to change' : 'Model selected — click to change';
+  }
   if (status) {
     status.textContent = '';
     status.classList.remove('error');
   }
+}
+
+$('#modelUpload').onchange = (e) => {
+  applyChosenModelFile(e.target.files?.[0]);
 };
+
+const modelDropzone = $('#modelDropzone');
+if (modelDropzone) {
+  ['dragenter', 'dragover'].forEach((evt) => {
+    modelDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      modelDropzone.classList.add('is-dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach((evt) => {
+    modelDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      modelDropzone.classList.remove('is-dragover');
+    });
+  });
+  modelDropzone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) applyChosenModelFile(file);
+  });
+}
 
 $('#modelCancelEdit')?.addEventListener('click', () => {
   resetModelForm();
   if ($('#modelStatus')) $('#modelStatus').textContent = '';
+  renderModelManageList();
 });
 
 $('#modelForm').onsubmit = async (e) => {
