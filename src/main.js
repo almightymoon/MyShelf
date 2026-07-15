@@ -9,8 +9,10 @@ import './styles/models.css';
 import './styles/experience.css';
 import {
   addIdeaComment,
+  createMember,
   deleteCategory,
   deleteIdea,
+  deleteMember,
   deleteSite,
   fetchProfile,
   insertMessage,
@@ -22,6 +24,7 @@ import {
   signUp,
   supabase,
   toggleIdeaLike as setIdeaLikeRemote,
+  updateMember,
   uploadDataUrl,
   upsertCategory,
   upsertIdea,
@@ -951,17 +954,53 @@ function renderIdeaManageList() {
       .join('') || '<p>No ideas on the pinboard yet.</p>';
 }
 
+function isProtectedAdminUser(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return String(user.email || '').toLowerCase() === ADMIN.email.toLowerCase();
+}
+
 function renderUserManageList() {
   const list = $('#userManageList');
   if (!list) return;
   const users = getUsers();
   list.innerHTML =
     users
-      .map(
-        (user, i) =>
-          `<div class="manage-item"><div><h3>${escapeHtml(user.name || 'Member')}</h3><p>${escapeHtml(user.email)} · joined ${user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</p></div><button type="button" class="delete" data-remove-user="${i}">Remove</button></div>`
-      )
-      .join('') || '<p>No members yet. Signups will appear here.</p>';
+      .map((user, i) => {
+        const protectedAdmin = isProtectedAdminUser(user);
+        const badges = [
+          protectedAdmin ? '<span class="user-badge admin">Admin</span>' : '',
+          user.blocked ? '<span class="user-badge blocked">Blocked</span>' : '',
+        ].join('');
+        const joined = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—';
+        const actions = protectedAdmin
+          ? `<div class="manage-actions"><button type="button" class="edit" data-edit-user="${i}">Edit name</button></div>`
+          : `<div class="manage-actions">
+              <button type="button" class="edit" data-edit-user="${i}">Edit</button>
+              <button type="button" class="block" data-block-user="${i}">${user.blocked ? 'Unblock' : 'Block'}</button>
+              <button type="button" class="delete" data-remove-user="${i}">Remove</button>
+            </div>`;
+        return `<div class="manage-item${user.blocked ? ' is-blocked' : ''}" data-user-id="${escapeHtml(user.id || '')}">
+          <div>
+            <h3>${escapeHtml(user.name || 'Member')}${badges}</h3>
+            <p>${escapeHtml(user.email)} · joined ${joined}</p>
+            <div class="user-edit-row" hidden data-user-edit="${i}">
+              <input type="text" value="${escapeHtml(user.name || '')}" aria-label="Edit name" maxlength="80">
+              <button type="button" class="edit" data-save-user="${i}">Save</button>
+              <button type="button" class="edit" data-cancel-user="${i}">Cancel</button>
+            </div>
+          </div>
+          ${actions}
+        </div>`;
+      })
+      .join('') || '<p>No members yet. Add one above or wait for signups.</p>';
+}
+
+async function refreshUsersFromShelf() {
+  if (!supabaseReady) return;
+  const data = await loadShelf();
+  if (!data.usersError && data.users) saveUsers(data.users);
+  renderDash();
 }
 
 function syncIdeaUploadUi() {
@@ -1724,6 +1763,8 @@ $('#memberLoginForm')?.addEventListener('submit', async (e) => {
       if (/email not confirmed/i.test(msg)) {
         note.innerHTML =
           'Email not confirmed yet. In Supabase → <b>Authentication → Users</b>, open your user and click <b>Confirm email</b> (or disable Confirm email under Providers).';
+      } else if (/blocked/i.test(msg)) {
+        note.textContent = 'This account has been blocked from Athar’s Shelf.';
       } else if (/invalid login credentials/i.test(msg) && email === ADMIN.email.toLowerCase()) {
         note.innerHTML =
           'No admin account yet. <a href="#signup">Sign up</a> with this email first (same password), after running <code>supabase/bootstrap.sql</code>.';
@@ -2125,10 +2166,107 @@ $('#ideaManageList')?.addEventListener('click', async (e) => {
   }
 });
 
-$('#userManageList')?.addEventListener('click', (e) => {
-  const button = e.target.closest('[data-remove-user]');
-  if (!button || !isAdmin()) return;
-  alert('Remove members from the Supabase Auth dashboard (Authentication → Users).');
+$('#userForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!isAdmin()) return;
+  const status = $('#userStatus');
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  const name = String(data.name || '').trim();
+  const email = String(data.email || '').trim().toLowerCase();
+  const password = String(data.password || '');
+  if (status) {
+    status.textContent = 'Creating member…';
+    status.classList.remove('error');
+  }
+  try {
+    if (!supabaseReady) throw new Error('Supabase is not ready. Run supabase/users-admin.sql first.');
+    await createMember({ name, email, password });
+    form.reset();
+    await refreshUsersFromShelf();
+    if (status) status.textContent = `Added ${name || email}.`;
+  } catch (err) {
+    if (status) {
+      status.textContent = err.message || 'Could not create that member.';
+      status.classList.add('error');
+    }
+  }
+});
+
+$('#userManageList')?.addEventListener('click', async (e) => {
+  const editBtn = e.target.closest('[data-edit-user]');
+  const cancelBtn = e.target.closest('[data-cancel-user]');
+  const saveBtn = e.target.closest('[data-save-user]');
+  const blockBtn = e.target.closest('[data-block-user]');
+  const removeBtn = e.target.closest('[data-remove-user]');
+  if (!isAdmin()) return;
+
+  if (editBtn) {
+    const i = Number(editBtn.dataset.editUser);
+    const row = $(`[data-user-edit="${i}"]`);
+    if (row) row.hidden = false;
+    return;
+  }
+  if (cancelBtn) {
+    const i = Number(cancelBtn.dataset.cancelUser);
+    const row = $(`[data-user-edit="${i}"]`);
+    if (row) row.hidden = true;
+    return;
+  }
+  if (saveBtn) {
+    const i = Number(saveBtn.dataset.saveUser);
+    const user = getUsers()[i];
+    const row = $(`[data-user-edit="${i}"]`);
+    const input = row?.querySelector('input');
+    const name = String(input?.value || '').trim();
+    if (!user?.id || !name) return;
+    try {
+      const saved = await updateMember(user.id, { name });
+      const users = getUsers();
+      users[i] = { ...users[i], ...saved };
+      saveUsers(users);
+      renderDash();
+    } catch (err) {
+      alert(err.message || 'Could not update that member.');
+    }
+    return;
+  }
+  if (blockBtn) {
+    const i = Number(blockBtn.dataset.blockUser);
+    const user = getUsers()[i];
+    if (!user?.id || isProtectedAdminUser(user)) return;
+    const nextBlocked = !user.blocked;
+    if (!confirm(nextBlocked ? `Block ${user.email}? They will be signed out and cannot use the shelf.` : `Unblock ${user.email}?`)) {
+      return;
+    }
+    try {
+      const saved = await updateMember(user.id, { blocked: nextBlocked });
+      const users = getUsers();
+      users[i] = { ...users[i], ...saved };
+      saveUsers(users);
+      renderDash();
+    } catch (err) {
+      alert(err.message || 'Could not update block status.');
+    }
+    return;
+  }
+  if (removeBtn) {
+    const i = Number(removeBtn.dataset.removeUser);
+    const user = getUsers()[i];
+    if (!user?.id || isProtectedAdminUser(user)) {
+      alert('The admin account cannot be removed.');
+      return;
+    }
+    if (!confirm(`Permanently remove ${user.email}? This deletes their account.`)) return;
+    try {
+      await deleteMember(user.id);
+      const users = getUsers().filter((_, idx) => idx !== i);
+      saveUsers(users);
+      renderDash();
+    } catch (err) {
+      alert(err.message || 'Could not remove that member. Run supabase/users-admin.sql if you haven’t.');
+    }
+  }
 });
 
 const MODEL_MAX_BYTES = 150 * 1024 * 1024;
@@ -2278,7 +2416,15 @@ async function boot() {
     ideaNotesCache = { ...ideaSeedNotes };
   } else {
     try {
-      currentProfile = await fetchProfile();
+      try {
+        currentProfile = await fetchProfile();
+      } catch (authErr) {
+        if (authErr?.code === 'blocked' || /blocked/i.test(authErr?.message || '')) {
+          currentProfile = null;
+        } else {
+          throw authErr;
+        }
+      }
       let data = await loadShelf();
       if ((!data.sites.length || !data.ideas.length || !data.models.length) && isAdmin()) {
         await seedDefaults({
@@ -2323,7 +2469,16 @@ async function boot() {
 
   if (supabase) {
     supabase.auth.onAuthStateChange(async (_event, session) => {
-      currentProfile = session ? await fetchProfile() : null;
+      try {
+        currentProfile = session ? await fetchProfile() : null;
+      } catch (err) {
+        if (err?.code === 'blocked' || /blocked/i.test(err?.message || '')) {
+          currentProfile = null;
+        } else {
+          console.error(err);
+          currentProfile = null;
+        }
+      }
       syncAccountUi();
       if (isAdmin()) await maybeSeedAsAdmin();
       renderDash();

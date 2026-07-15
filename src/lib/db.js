@@ -90,25 +90,33 @@ export async function fetchProfile() {
     email,
     name: user.user_metadata?.name || '',
     role: email === adminEmail ? 'admin' : 'member',
+    blocked: false,
   };
   const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error) {
-    // Table missing or RLS blocked — still allow admin by email.
     console.warn('profiles lookup failed:', error.message);
     return fallback;
   }
   if (!data) return fallback;
+  if (data.blocked && email !== adminEmail) {
+    await supabase.auth.signOut();
+    const err = new Error('Your account has been blocked from Athar’s Shelf.');
+    err.code = 'blocked';
+    throw err;
+  }
   return {
     id: data.id,
     email: data.email,
     name: data.name,
     role: data.role === 'admin' || email === adminEmail ? 'admin' : data.role,
+    blocked: Boolean(data.blocked),
   };
 }
 
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
+  await fetchProfile();
   return data;
 }
 
@@ -138,7 +146,7 @@ export async function loadShelf() {
     supabase.from('categories').select('*').order('label'),
     supabase.from('models').select('*').order('created_at', { ascending: false }),
     supabase.from('messages').select('*').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id,email,name,role,created_at').order('created_at', { ascending: false }),
+    supabase.from('profiles').select('id,email,name,role,blocked,created_at').order('created_at', { ascending: false }),
     supabase.from('idea_likes').select('idea_id,user_id'),
     supabase.from('idea_comments').select('*').order('created_at', { ascending: true }),
   ]);
@@ -167,6 +175,7 @@ export async function loadShelf() {
       email: u.email,
       name: u.name,
       role: u.role,
+      blocked: Boolean(u.blocked),
       createdAt: u.created_at ? Date.parse(u.created_at) : Date.now(),
     })),
     usersError: usersRes.error || null,
@@ -314,6 +323,43 @@ export async function addIdeaComment(ideaId, userId, name, text) {
     .single();
   if (error) throw error;
   return data;
+}
+
+function mapProfileRow(u) {
+  if (!u) return null;
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    blocked: Boolean(u.blocked),
+    createdAt: u.created_at ? Date.parse(u.created_at) : Date.now(),
+  };
+}
+
+export async function createMember({ name, email, password }) {
+  const { data, error } = await supabase.rpc('admin_create_member', {
+    new_email: email,
+    new_password: password,
+    new_name: name || '',
+  });
+  if (error) throw error;
+  return mapProfileRow(data);
+}
+
+export async function updateMember(id, { name, blocked }) {
+  const { data, error } = await supabase.rpc('admin_update_member', {
+    target_id: id,
+    new_name: name ?? null,
+    new_blocked: typeof blocked === 'boolean' ? blocked : null,
+  });
+  if (error) throw error;
+  return mapProfileRow(data);
+}
+
+export async function deleteMember(id) {
+  const { error } = await supabase.rpc('admin_delete_member', { target_id: id });
+  if (error) throw error;
 }
 
 function extFromFile(file, fallback = 'bin') {

@@ -345,7 +345,14 @@
       <div id="usersAdmin" class="panel">
         <p class="eyebrow">SHELF MEMBERS</p>
         <h2>Users.</h2>
-        <p class="users-admin-lead">People who signed up to download, like, and comment.</p>
+        <p class="users-admin-lead">Create members, edit names, block access, or remove accounts. The admin account cannot be deleted or blocked.</p>
+        <form id="userForm" class="user-form">
+          <label>Name<input name="name" required placeholder="Member name" autocomplete="off"></label>
+          <label>Email<input name="email" type="email" required placeholder="member@email.com" autocomplete="off"></label>
+          <label>Password<input name="password" type="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password"></label>
+          <button type="submit">Add member <span>↗</span></button>
+          <p class="form-status" id="userStatus"></p>
+        </form>
         <div id="userManageList"></div>
       </div>
       <div id="categories" class="panel">

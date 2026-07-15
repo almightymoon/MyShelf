@@ -9,6 +9,7 @@ create table if not exists public.profiles (
   email text unique not null,
   name text not null default '',
   role text not null default 'member' check (role in ('member', 'admin')),
+  blocked boolean not null default false,
   created_at timestamptz not null default now()
 );
 
