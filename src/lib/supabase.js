@@ -1,20 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Vite: use import.meta.env.VITE_* (process.env is Node-only)
-const url = (
-  import.meta.env.VITE_SUPABASE_URL ||
-  import.meta.env.SUPABASE_URL ||
-  ''
-).trim();
+const url = String(import.meta.env.VITE_SUPABASE_URL || '').trim();
+const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
-const anonKey = (
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  import.meta.env.SUPABASE_ANON_KEY ||
-  ''
-).trim();
-
-export const isSupabaseConfigured = Boolean(url && anonKey && !url.includes('YOUR_PROJECT'));
+export const isSupabaseConfigured = Boolean(
+  url &&
+    anonKey &&
+    !url.includes('YOUR_PROJECT') &&
+    !anonKey.includes('YOUR_ANON')
+);
 
 export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {

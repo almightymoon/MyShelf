@@ -23,6 +23,25 @@ VITE_SUPABASE_ANON_KEY=YOUR_ANON_OR_PUBLISHABLE_KEY
 
 Restart the Vite dev server after saving `.env`.
 
+### Vercel
+
+Connecting Supabase in Vercel does **not** automatically give Vite `VITE_*` names. The integration usually syncs:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY`
+
+This app’s `vite.config.js` maps those into the client at build time. After changing env vars, **redeploy**.
+
+Optional: in Vercel → Project → Settings → Environment Variables, also add:
+
+```
+VITE_SUPABASE_URL=…same URL…
+VITE_SUPABASE_ANON_KEY=…same publishable/anon key…
+```
+
+Then redeploy.
+
 ## 3. Run the schema
 
 In the Supabase dashboard → **SQL Editor** → New query:

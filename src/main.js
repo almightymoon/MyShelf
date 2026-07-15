@@ -2222,15 +2222,16 @@ $('#contactForm').onsubmit = async (e) => {
   }
 };
 
-function showConfigBanner() {
-  if (document.getElementById('supabaseBanner')) return;
-  const banner = document.createElement('div');
-  banner.id = 'supabaseBanner';
-  banner.style.cssText =
-    'position:fixed;left:16px;right:16px;bottom:16px;z-index:200;background:#1f201e;color:#f5f1ea;padding:14px 16px;font:13px/1.4 \"DM Sans\",sans-serif;border-left:4px solid #ff7556;box-shadow:0 12px 40px rgba(0,0,0,.25)';
-  banner.innerHTML =
-    'Supabase is not configured yet. Copy <code>.env.example</code> → <code>.env</code>, add your project URL + anon key, run <code>supabase/schema.sql</code>, then restart the dev server.';
-  document.body.appendChild(banner);
+function showConfigBanner(message) {
+  let banner = document.getElementById('supabaseBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'supabaseBanner';
+    banner.style.cssText =
+      'position:fixed;left:16px;right:16px;bottom:16px;z-index:200;background:#1f201e;color:#f5f1ea;padding:14px 16px;font:13px/1.4 "DM Sans",sans-serif;border-left:4px solid #ff7556;box-shadow:0 12px 40px rgba(0,0,0,.25)';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = message;
 }
 
 async function applyShelfData(data) {
@@ -2254,7 +2255,9 @@ async function boot() {
   syncModelDownloadUi();
 
   if (!isSupabaseConfigured) {
-    showConfigBanner();
+    showConfigBanner(
+      'Supabase env vars are missing. Locally: add <code>VITE_SUPABASE_URL</code> + <code>VITE_SUPABASE_ANON_KEY</code> to <code>.env</code>. On Vercel: set those same names (or keep the Supabase integration’s <code>NEXT_PUBLIC_SUPABASE_*</code> vars) and redeploy.'
+    );
     sites = normalizeSites(defaults);
     ideas = normalizeIdeas(defaultIdeas);
     modelMeta = ensureSampleModels([]);
@@ -2278,9 +2281,14 @@ async function boot() {
       if (!data.sites.length) sites = normalizeSites(defaults);
       if (!data.ideas.length) ideas = normalizeIdeas(defaultIdeas);
       if (!data.models.length) modelMeta = ensureSampleModels([]);
+      const old = document.getElementById('supabaseBanner');
+      if (old) old.remove();
     } catch (err) {
       console.error(err);
-      showConfigBanner();
+      const detail = err?.message || String(err);
+      showConfigBanner(
+        `Connected to Supabase, but loading failed: <code>${detail}</code>. Usually the schema isn’t applied yet — run <code>supabase/schema.sql</code> in the SQL Editor, then refresh.`
+      );
       sites = normalizeSites(defaults);
       ideas = normalizeIdeas(defaultIdeas);
       modelMeta = ensureSampleModels([]);
