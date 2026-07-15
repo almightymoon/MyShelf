@@ -42,68 +42,47 @@ jobs:
 
             if [ ! -f "$APP_DIR/.env" ]; then
               cp "$APP_DIR/.env.vps.example" "$APP_DIR/.env"
-              echo "==> Created .env from example — edit secrets on the server if needed"
             fi
 
             DOCKER_BIN="$(command -v docker)"
             if echo "$DOCKER_BIN" | grep -q snap; then
-              echo "::error::Snap Docker detected ($DOCKER_BIN). Install official Docker: curl -fsSL https://get.docker.com | sh"
+              echo "::error::Snap Docker detected. Install official Docker."
               exit 1
             fi
 
-            echo "==> Building frontend"
+            echo "==> Building frontend (same-origin /api for lab.athariqbal.com)"
             npm ci
             set -a
             # shellcheck disable=SC1091
             . "$APP_DIR/.env"
             set +a
-            export VITE_API_URL="${VITE_API_URL:-}"
+            export VITE_API_URL=
             npm run build
 
-            echo "==> Docker stack (API on 127.0.0.1:4010 — Apache fronts :80/:443)"
+            echo "==> Docker stack (API 127.0.0.1:4010)"
             set -a
             # shellcheck disable=SC1091
             . "$APP_DIR/.env"
             set +a
             docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" up -d --build --remove-orphans
-            # Stop optional Caddy if it was started earlier and fought Apache
-            docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" stop caddy 2>/dev/null || true
+            docker rm -f myshelf-caddy-1 2>/dev/null || true
 
-            echo "==> Apache :7878 (forex/portfolio on :80/:443 untouched)"
+            echo "==> Apache lab.athariqbal.com (does not edit forex/portfolio files)"
             sudo a2enmod proxy proxy_http rewrite headers ssl 2>/dev/null || true
-            sudo cp "$APP_DIR/deploy/apache/myshelf-port.conf" /etc/apache2/conf-available/myshelf-port.conf
-            sudo cp "$APP_DIR/deploy/apache/myshelf.conf" /etc/apache2/sites-available/myshelf.conf
-            sudo cp "$APP_DIR/deploy/apache/myshelf-80-acme.conf" /etc/apache2/sites-available/myshelf-80-acme.conf
-            sudo cp "$APP_DIR/deploy/apache/myshelf-le-ssl.conf" /etc/apache2/sites-available/myshelf-le-ssl.conf
-            sudo a2enconf myshelf-port
-            sudo a2ensite myshelf-80-acme.conf
-            if [ -f /etc/letsencrypt/live/myshelf.athariqbal.com/fullchain.pem ]; then
-              sudo a2dissite myshelf.conf 2>/dev/null || true
-              sudo a2ensite myshelf-le-ssl.conf
-            else
-              sudo a2dissite myshelf-le-ssl.conf 2>/dev/null || true
-              sudo a2ensite myshelf.conf
+            sudo cp "$APP_DIR/deploy/apache/lab.conf" /etc/apache2/sites-available/lab.conf
+            sudo cp "$APP_DIR/deploy/apache/lab-le-ssl.conf" /etc/apache2/sites-available/lab-le-ssl.conf
+            sudo a2ensite lab.conf
+            # Disable old myshelf names without deleting forex/portfolio
+            sudo a2dissite myshelf.conf 2>/dev/null || true
+            sudo a2dissite myshelf-80-acme.conf 2>/dev/null || true
+            sudo a2dissite myshelf-le-ssl.conf 2>/dev/null || true
+            if [ -f /etc/letsencrypt/live/lab.athariqbal.com/fullchain.pem ]; then
+              sudo a2ensite lab-le-ssl.conf
             fi
-            sudo ufw allow 7878/tcp 2>/dev/null || true
             sudo apache2ctl configtest
             sudo systemctl reload apache2
 
-            echo "==> Health checks"
-            ok=0
-            for i in $(seq 1 30); do
-              if curl -fsS http://127.0.0.1:4010/api/health >/dev/null 2>&1; then
-                ok=1
-                break
-              fi
-              sleep 2
-            done
-            if [ "$ok" -ne 1 ]; then
-              docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" logs --tail=80 api || true
-              exit 1
-            fi
+            echo "==> Health"
             curl -fsS http://127.0.0.1:4010/api/health; echo
-            curl -fsS http://127.0.0.1:7878/api/health; echo
-            docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" ps
-            echo "==> Live: http://72.60.193.51:7878"
-            echo "    For SSL: point myshelf.athariqbal.com A → 72.60.193.51 then:"
-            echo "    certbot certonly --webroot -w /var/www/MyShelf/dist -d myshelf.athariqbal.com --agree-tos -m atharqulimoon@gmail.com && a2dissite myshelf.conf && a2ensite myshelf-le-ssl.conf && systemctl reload apache2"
+            curl -fsS -H 'Host: lab.athariqbal.com' http://127.0.0.1/api/health; echo
+            echo "==> Public: https://lab.athariqbal.com (after DNS A → server + certbot)"
