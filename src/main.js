@@ -393,7 +393,9 @@ function clearDraftMedia() {
 }
 
 function isAdmin() {
-  return currentProfile?.role === 'admin';
+  if (currentProfile?.role === 'admin') return true;
+  const email = String(currentProfile?.email || '').trim().toLowerCase();
+  return Boolean(email && email === ADMIN.email.toLowerCase());
 }
 
 function setAdmin() {
@@ -1717,8 +1719,19 @@ $('#memberLoginForm')?.addEventListener('submit', async (e) => {
     await resumePendingDownload();
     if (!job) window.location.hash = 'home';
   } catch (err) {
+    const msg = err.message || 'Wrong email or password.';
     if (note) {
-      note.textContent = err.message || 'Wrong email or password.';
+      if (/email not confirmed/i.test(msg)) {
+        note.innerHTML =
+          'Email not confirmed yet. In Supabase → <b>Authentication → Users</b>, open your user and click <b>Confirm email</b> (or disable Confirm email under Providers).';
+      } else if (/invalid login credentials/i.test(msg) && email === ADMIN.email.toLowerCase()) {
+        note.innerHTML =
+          'No admin account yet. <a href="#signup">Sign up</a> with this email first (same password), after running <code>supabase/bootstrap.sql</code>.';
+      } else if (/invalid login credentials/i.test(msg)) {
+        note.innerHTML = 'Wrong email or password — or create an account on <a href="#signup">Sign up</a>.';
+      } else {
+        note.textContent = msg;
+      }
       note.classList.add('error');
     }
   }

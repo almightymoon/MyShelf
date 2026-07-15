@@ -83,11 +83,27 @@ export async function fetchProfile() {
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData?.session?.user;
   if (!user) return null;
+  const email = String(user.email || '').toLowerCase();
+  const adminEmail = 'atharqulimoon@gmail.com';
+  const fallback = {
+    id: user.id,
+    email,
+    name: user.user_metadata?.name || '',
+    role: email === adminEmail ? 'admin' : 'member',
+  };
   const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-  if (error) throw error;
-  return data
-    ? { id: data.id, email: data.email, name: data.name, role: data.role }
-    : { id: user.id, email: user.email, name: user.user_metadata?.name || '', role: 'member' };
+  if (error) {
+    // Table missing or RLS blocked — still allow admin by email.
+    console.warn('profiles lookup failed:', error.message);
+    return fallback;
+  }
+  if (!data) return fallback;
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name,
+    role: data.role === 'admin' || email === adminEmail ? 'admin' : data.role,
+  };
 }
 
 export async function signIn(email, password) {
