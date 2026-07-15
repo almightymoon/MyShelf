@@ -8,12 +8,31 @@ import './styles/extras.css';
 import './styles/models.css';
 import './styles/experience.css';
 import {
+  addIdeaComment,
+  deleteCategory,
+  deleteIdea,
+  deleteSite,
+  fetchProfile,
+  insertMessage,
+  isSupabaseConfigured,
+  loadShelf,
+  seedDefaults,
+  signIn,
+  signOut,
+  signUp,
+  supabase,
+  toggleIdeaLike as setIdeaLikeRemote,
+  uploadDataUrl,
+  upsertCategory,
+  upsertIdea,
+  upsertModel,
+  upsertSite,
+} from './lib/db.js';
+import {
   createObjectUrl,
   deleteModelBlob,
   getModelBlob,
-  getModelMeta,
-  saveModelBlob,
-  setModelMeta,
+  uploadModelFile,
 } from './models.js';
 
 const ADMIN = {
@@ -141,39 +160,26 @@ const defaultModels = [
 
 function ensureSampleModels(list) {
   let current = Array.isArray(list) ? [...list] : [];
-  if (!current.length) {
-    setModelMeta(defaultModels);
-    return [...defaultModels];
-  }
+  if (!current.length) return [...defaultModels];
 
   const replacements = {
     'sample-chair': 'sample-armstrong',
     'sample-helmet': 'sample-armstrong',
   };
-  let changed = false;
   current = current.map((model) => {
     const nextId = replacements[model.id];
     if (!nextId) return model;
     const sample = defaultModels.find((item) => item.id === nextId);
-    if (!sample) return model;
-    changed = true;
-    return { ...sample };
+    return sample ? { ...sample } : model;
   });
 
   const ids = new Set(current.map((m) => m.id));
   for (const sample of defaultModels) {
-    const existing = current.find((m) => m.id === sample.id);
-    if (existing?.sample && existing.src !== sample.src) {
-      Object.assign(existing, sample);
-      changed = true;
-    } else if (!ids.has(sample.id) && current.every((m) => m.sample)) {
+    if (!ids.has(sample.id) && current.every((m) => m.sample)) {
       current.push({ ...sample });
       ids.add(sample.id);
-      changed = true;
     }
   }
-
-  if (changed) setModelMeta(current);
   return current;
 }
 
@@ -208,20 +214,20 @@ function normalizeIdeas(list) {
   })).filter((idea) => idea.image);
 }
 
-let ideas = normalizeIdeas(get('athar-shelf-ideas', defaultIdeas));
-function saveIdeas() {
-  set('athar-shelf-ideas', ideas);
-}
-let sites = get('athar-shelf-sites', defaults);
-let messages = get('athar-shelf-messages');
+let ideas = [];
+let sites = [];
+let messages = [];
 let activeFilter = 'all';
 let query = '';
 let reverse = false;
 let editingSiteIndex = null;
 let draftCover = '';
 let draftGallery = [];
-let modelMeta = ensureSampleModels(getModelMeta());
+let modelMeta = [];
+let currentProfile = null;
+let ideaNotesCache = {};
 const modelObjectUrls = new Map();
+let supabaseReady = false;
 
 async function resolveModelUrl(meta) {
   if (!meta) return null;
@@ -250,12 +256,8 @@ function slugifyCategory(name) {
 }
 
 function loadCategories() {
-  const stored = get('athar-shelf-categories', defaultCategories);
   const map = new Map();
-  [...defaultCategories, ...stored].forEach((cat) => {
-    if (!cat?.id) return;
-    map.set(cat.id, { id: cat.id, label: cat.label || cat.id });
-  });
+  defaultCategories.forEach((cat) => map.set(cat.id, { id: cat.id, label: cat.label || cat.id }));
   sites.forEach((site) => {
     if (!site.category || map.has(site.category)) return;
     map.set(site.category, {
@@ -266,29 +268,33 @@ function loadCategories() {
   return [...map.values()];
 }
 
-let categories = loadCategories();
+let categories = [...defaultCategories];
 
 function saveCategories() {
-  set('athar-shelf-categories', categories);
+  /* categories persist via Supabase helpers */
 }
 
 function categoryLabel(id) {
   return categories.find((c) => c.id === id)?.label || id;
 }
 
-sites = sites.map((site, index) => {
-  const cover = site.image || fallbackImage;
-  let gallery = parseGallery(site.gallery).filter(Boolean);
-  gallery = gallery.filter((src, i, all) => src && all.indexOf(src) === i);
-  if (!gallery.length || (gallery.length === 1 && gallery[0] === cover)) {
-    gallery = [cover, galleryFallbacks[index % galleryFallbacks.length]].filter(
-      (src, i, all) => all.indexOf(src) === i
-    );
-  }
-  site.gallery = gallery;
-  if (!site.blurb && site.description) site.blurb = site.description;
-  return site;
-});
+function normalizeSites(list) {
+  return (Array.isArray(list) ? list : []).map((site, index) => {
+    const cover = site.image || fallbackImage;
+    let gallery = parseGallery(site.gallery).filter(Boolean);
+    gallery = gallery.filter((src, i, all) => src && all.indexOf(src) === i);
+    if (!gallery.length || (gallery.length === 1 && gallery[0] === cover)) {
+      gallery = [cover, galleryFallbacks[index % galleryFallbacks.length]].filter(
+        (src, i, all) => all.indexOf(src) === i
+      );
+    }
+    return {
+      ...site,
+      gallery,
+      blurb: site.blurb || site.description || '',
+    };
+  });
+}
 
 const lookDefaults = {
   cardBg: '#ffffff',
@@ -387,33 +393,32 @@ function clearDraftMedia() {
 }
 
 function isAdmin() {
-  return localStorage.getItem('athar-shelf-auth') === 'true';
+  return currentProfile?.role === 'admin';
 }
 
-function setAdmin(on) {
-  if (on) localStorage.setItem('athar-shelf-auth', 'true');
-  else localStorage.removeItem('athar-shelf-auth');
+function setAdmin() {
+  /* no-op — admin comes from Supabase profile.role */
 }
 
 function getUsers() {
-  return get('athar-shelf-users', []);
+  return get('athar-shelf-users-cache', []);
 }
 
 function saveUsers(users) {
-  set('athar-shelf-users', users);
+  set('athar-shelf-users-cache', users);
 }
 
 function getMemberSession() {
-  return get('athar-shelf-session', null);
+  if (!currentProfile) return null;
+  return { email: currentProfile.email, name: currentProfile.name, id: currentProfile.id };
 }
 
-function setMemberSession(user) {
-  if (user) set('athar-shelf-session', { email: user.email, name: user.name });
-  else localStorage.removeItem('athar-shelf-session');
+function setMemberSession() {
+  /* session lives in Supabase Auth */
 }
 
 function isMember() {
-  return Boolean(getMemberSession()?.email);
+  return Boolean(currentProfile?.email);
 }
 
 function canDownload() {
@@ -432,8 +437,8 @@ function isLoggedIn() {
   return isAdmin();
 }
 
-function setLoggedIn(on) {
-  setAdmin(on);
+function setLoggedIn() {
+  /* no-op */
 }
 
 let activeIdeaIndex = null;
@@ -554,41 +559,46 @@ function ideaKey(index) {
 }
 
 function getIdeaNotes() {
-  const stored = get('athar-shelf-idea-notes', null);
-  if (stored && typeof stored === 'object') {
-    if (stored['8'] && !stored['late-afternoon']) {
-      stored['late-afternoon'] = stored['8'];
-      delete stored['8'];
-    }
-    if (stored['0'] && !stored['soft-chrome']) {
-      stored['soft-chrome'] = stored['0'];
-      delete stored['0'];
-    }
-    return stored;
-  }
-  set('athar-shelf-idea-notes', ideaSeedNotes);
-  return { ...ideaSeedNotes };
+  return ideaNotesCache;
 }
 
 function saveIdeaNotes(notes) {
-  set('athar-shelf-idea-notes', notes);
+  ideaNotesCache = notes;
 }
 
 function ideaSocial(index) {
   const notes = getIdeaNotes();
   const key = ideaKey(index);
-  if (!notes[key]) {
-    notes[key] = { likes: 0, likedBy: [], comments: [] };
-    saveIdeaNotes(notes);
-  }
+  if (!notes[key]) notes[key] = { likes: 0, likedBy: [], comments: [] };
   return notes[key];
 }
 
 function memberId() {
-  const member = getMemberSession();
-  if (member?.email) return member.email;
-  if (isAdmin()) return ADMIN.email;
-  return null;
+  return currentProfile?.id || currentProfile?.email || null;
+}
+
+function buildIdeaNotes(likes, comments) {
+  const notes = {};
+  (likes || []).forEach((like) => {
+    const key = like.idea_id;
+    if (!notes[key]) notes[key] = { likes: 0, likedBy: [], comments: [] };
+    notes[key].likedBy.push(like.user_id);
+    notes[key].likes = notes[key].likedBy.length;
+  });
+  (comments || []).forEach((c) => {
+    const key = c.idea_id;
+    if (!notes[key]) notes[key] = { likes: 0, likedBy: [], comments: [] };
+    notes[key].comments.push({
+      name: c.name,
+      text: c.body,
+      at: c.created_at ? Date.parse(c.created_at) : Date.now(),
+    });
+  });
+  return notes;
+}
+
+async function saveIdeas() {
+  /* individual idea writes go through upsertIdea/deleteIdea */
 }
 
 function ideaQualityUrl(src, quality) {
@@ -773,18 +783,25 @@ async function downloadActiveIdea(skipAuthCheck = false) {
   }
 }
 
-function toggleIdeaLike() {
+async function toggleIdeaLike() {
   if (activeIdeaIndex === null) return;
   if (!canDownload()) {
     requireDownloadAuth('idea', { index: activeIdeaIndex });
     return;
   }
   const uid = memberId();
-  if (!uid) return;
+  const idea = ideas[activeIdeaIndex];
+  if (!uid || !idea?.id) return;
   const notes = getIdeaNotes();
   const key = ideaKey(activeIdeaIndex);
   const social = notes[key] || { likes: 0, likedBy: [], comments: [] };
   const liked = social.likedBy.includes(uid);
+  try {
+    if (supabaseReady) await setIdeaLikeRemote(idea.id, uid, liked);
+  } catch (err) {
+    console.error(err);
+    return;
+  }
   if (liked) {
     social.likedBy = social.likedBy.filter((id) => id !== uid);
     social.likes = Math.max(0, (social.likes || 1) - 1);
@@ -797,7 +814,7 @@ function toggleIdeaLike() {
   renderIdeaSocial();
 }
 
-function postIdeaComment(text) {
+async function postIdeaComment(text) {
   if (activeIdeaIndex === null) return false;
   if (!canDownload()) {
     requireDownloadAuth('idea', { index: activeIdeaIndex });
@@ -805,10 +822,20 @@ function postIdeaComment(text) {
   }
   const member = getMemberSession();
   const name = member?.name || (isAdmin() ? 'Athar' : 'Guest');
+  const idea = ideas[activeIdeaIndex];
+  const uid = memberId();
   const notes = getIdeaNotes();
   const key = ideaKey(activeIdeaIndex);
   const social = notes[key] || { likes: 0, likedBy: [], comments: [] };
   social.comments = social.comments || [];
+  try {
+    if (supabaseReady && idea?.id) {
+      await addIdeaComment(idea.id, uid, name, text);
+    }
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
   social.comments.push({ name, text, at: Date.now() });
   notes[key] = social;
   saveIdeaNotes(notes);
@@ -1539,11 +1566,11 @@ $('#ideaPanelOpen')?.addEventListener('click', (e) => {
 $('#ideaPanelClose')?.addEventListener('click', closeIdeaPanel);
 $('#ideaDownloadBtn').onclick = () => downloadActiveIdea();
 $('#ideaLikeBtn')?.addEventListener('click', toggleIdeaLike);
-$('#ideaCommentForm')?.addEventListener('submit', (e) => {
+$('#ideaCommentForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = String(new FormData(e.target).get('comment') || '').trim();
   if (!text) return;
-  if (postIdeaComment(text)) e.target.reset();
+  if (await postIdeaComment(text)) e.target.reset();
 });
 $('#ideaDownloadHint')?.addEventListener('click', (e) => {
   const link = e.target.closest('a[href="#login"], a[href="#signup"]');
@@ -1618,10 +1645,34 @@ $('#siteDetail').onclick = (e) => {
 
 const dashboard = $('#dashboard');
 
-function loginAsAdmin() {
-  setAdmin(true);
-  setMemberSession({ name: 'Athar Iqbal', email: ADMIN.email });
+async function maybeSeedAsAdmin() {
+  if (!supabaseReady || !isAdmin()) return;
+  try {
+    const data = await loadShelf();
+    if (!data.sites.length || !data.ideas.length || !data.models.length) {
+      await seedDefaults({
+        sites: defaults,
+        ideas: defaultIdeas,
+        models: defaultModels,
+        categories: defaultCategories,
+      });
+      await applyShelfData(await loadShelf());
+      renderFilters();
+      renderCategorySelect();
+      renderSites();
+      renderIdeas();
+      await renderModels();
+      renderHomeModels();
+      renderDash();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loginAsAdmin() {
   syncAccountUi();
+  await maybeSeedAsAdmin();
   window.location.hash = 'home';
   openDashboard();
 }
@@ -1637,95 +1688,103 @@ $('#navAdmin')?.addEventListener('click', () => {
 $('#memberLoginForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const note = $('#memberLoginNote');
-  const data = Object.fromEntries(new FormData(e.target));
-  const email = data.email.trim().toLowerCase();
-  const password = data.password;
-
-  if (email === ADMIN.email.toLowerCase() && password === ADMIN.password) {
+  if (!isSupabaseConfigured) {
     if (note) {
-      note.textContent = 'Welcome back, Athar.';
-      note.classList.remove('error');
-    }
-    e.target.reset();
-    loginAsAdmin();
-    return;
-  }
-
-  const user = getUsers().find((u) => u.email === email);
-  if (!user || user.password !== password) {
-    if (note) {
-      note.textContent = 'Wrong email or password.';
+      note.textContent = 'Add Supabase keys to .env first (see .env.example).';
       note.classList.add('error');
     }
     return;
   }
-  setAdmin(false);
-  setMemberSession(user);
+  const data = Object.fromEntries(new FormData(e.target));
+  const email = data.email.trim().toLowerCase();
+  const password = data.password;
   if (note) {
-    note.textContent = 'Logged in.';
+    note.textContent = 'Signing in…';
     note.classList.remove('error');
   }
-  e.target.reset();
-  syncAccountUi();
-  const job = pendingDownload;
-  await resumePendingDownload();
-  if (!job) window.location.hash = 'home';
+  try {
+    await signIn(email, password);
+    currentProfile = await fetchProfile();
+    e.target.reset();
+    syncAccountUi();
+    if (isAdmin()) {
+      if (note) note.textContent = 'Welcome back, Athar.';
+      loginAsAdmin();
+      return;
+    }
+    if (note) note.textContent = 'Logged in.';
+    const job = pendingDownload;
+    await resumePendingDownload();
+    if (!job) window.location.hash = 'home';
+  } catch (err) {
+    if (note) {
+      note.textContent = err.message || 'Wrong email or password.';
+      note.classList.add('error');
+    }
+  }
 });
 
 $('#memberSignupForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const note = $('#memberSignupNote');
+  if (!isSupabaseConfigured) {
+    note.textContent = 'Add Supabase keys to .env first (see .env.example).';
+    note.classList.add('error');
+    return;
+  }
   const data = Object.fromEntries(new FormData(e.target));
   const email = data.email.trim().toLowerCase();
   const name = data.name.trim();
   const password = data.password;
-  if (email === ADMIN.email.toLowerCase()) {
-    note.textContent = 'That email is reserved. Log in instead.';
-    note.classList.add('error');
-    return;
-  }
   if (password.length < 6) {
     note.textContent = 'Use at least 6 characters for your password.';
     note.classList.add('error');
     return;
   }
-  const users = getUsers();
-  if (users.some((u) => u.email === email)) {
-    note.textContent = 'That email already has an account. Log in instead.';
-    note.classList.add('error');
-    return;
-  }
-  const user = { name, email, password, createdAt: Date.now() };
-  users.push(user);
-  saveUsers(users);
-  setMemberSession(user);
-  note.textContent = 'Account created.';
+  note.textContent = 'Creating account…';
   note.classList.remove('error');
-  e.target.reset();
-  syncAccountUi();
-  const job = pendingDownload;
-  await resumePendingDownload();
-  if (!job) window.location.hash = 'home';
+  try {
+    const result = await signUp(name, email, password);
+    if (!result.session) {
+      note.textContent = 'Account created. Check your email to confirm, then log in.';
+      e.target.reset();
+      return;
+    }
+    currentProfile = await fetchProfile();
+    e.target.reset();
+    syncAccountUi();
+    note.textContent = 'Account created.';
+    const job = pendingDownload;
+    await resumePendingDownload();
+    if (!job) window.location.hash = 'home';
+  } catch (err) {
+    note.textContent = err.message || 'Could not create that account.';
+    note.classList.add('error');
+  }
 });
 
-$('#memberSignOut')?.addEventListener('click', () => {
-  setMemberSession(null);
-  setAdmin(false);
+async function handleSignOut() {
   pendingDownload = null;
+  try {
+    await signOut();
+  } catch {
+    /* ignore */
+  }
+  currentProfile = null;
   closeDashboard();
+  resetEditor();
   syncAccountUi();
   window.location.hash = 'home';
+}
+
+$('#memberSignOut')?.addEventListener('click', () => {
+  handleSignOut();
 });
 
 $('#dashClose').onclick = closeDashboard;
 
 $('#signout').onclick = () => {
-  setAdmin(false);
-  setMemberSession(null);
-  closeDashboard();
-  resetEditor();
-  syncAccountUi();
-  window.location.hash = 'home';
+  handleSignOut();
 };
 
 document.querySelectorAll('.dash-link').forEach((b) => {
@@ -1774,11 +1833,20 @@ $('#manageList').onclick = (e) => {
     refreshPreview();
   }
   if (remove) {
-    sites.splice(Number(remove.dataset.remove), 1);
-    set('athar-shelf-sites', sites);
-    renderFilters();
-    renderSites();
-    renderDash();
+    const index = Number(remove.dataset.remove);
+    const site = sites[index];
+    if (!site) return;
+    (async () => {
+      try {
+        if (supabaseReady && site.id) await deleteSite(site.id);
+        sites.splice(index, 1);
+        renderFilters();
+        renderSites();
+        renderDash();
+      } catch (err) {
+        alert(err.message || 'Could not remove that site.');
+      }
+    })();
   }
 };
 
@@ -1833,43 +1901,71 @@ $('#galleryUploads').onclick = (e) => {
   renderGalleryUploads();
 };
 
-editorForm.onsubmit = (e) => {
+editorForm.onsubmit = async (e) => {
   e.preventDefault();
+  if (!isAdmin()) {
+    $('#addStatus').textContent = 'Admin login required.';
+    return;
+  }
   const data = Object.fromEntries(new FormData(editorForm));
   delete data.coverUpload;
   delete data.galleryUpload;
-  const urlGallery = parseGallery(data.gallery);
-  const entry = {
-    ...data,
-    image: draftCover || data.image || '',
-    gallery: [...draftGallery, ...urlGallery],
-  };
-  if (editingSiteIndex === null) sites.unshift(entry);
-  else sites[editingSiteIndex] = { ...sites[editingSiteIndex], ...entry };
+  const status = $('#addStatus');
+  status.textContent = 'Saving…';
   try {
-    set('athar-shelf-sites', sites);
-  } catch {
-    $('#addStatus').textContent = 'Images are too large for browser storage. Try fewer or smaller files.';
-    return;
+    let image = data.image || '';
+    if (draftCover?.startsWith('data:')) {
+      const uploaded = await uploadDataUrl('covers', draftCover, 'cover.jpg');
+      image = uploaded.url;
+    } else if (draftCover) {
+      image = draftCover;
+    }
+    const urlGallery = parseGallery(data.gallery);
+    const galleryUploads = [];
+    for (const item of draftGallery) {
+      if (item.startsWith('data:')) {
+        const uploaded = await uploadDataUrl('gallery', item, 'gallery.jpg');
+        galleryUploads.push(uploaded.url);
+      } else {
+        galleryUploads.push(item);
+      }
+    }
+    const entry = {
+      ...(editingSiteIndex !== null ? sites[editingSiteIndex] : {}),
+      ...data,
+      image,
+      gallery: [...galleryUploads, ...urlGallery],
+    };
+    if (supabaseReady) {
+      const saved = await upsertSite(entry, editingSiteIndex === null ? 0 : editingSiteIndex);
+      if (editingSiteIndex === null) sites.unshift(saved);
+      else sites[editingSiteIndex] = saved;
+    } else if (editingSiteIndex === null) {
+      sites.unshift(entry);
+    } else {
+      sites[editingSiteIndex] = entry;
+    }
+    renderFilters();
+    renderSites();
+    renderDash();
+    const wasEdit = editingSiteIndex !== null;
+    editingSiteIndex = null;
+    $('#add h2').textContent = 'Add a website.';
+    editorForm.querySelector('[type="submit"]').innerHTML = 'Publish to shelf <span>↗</span>';
+    editorForm.reset();
+    Object.entries(lookDefaults).forEach(([key, value]) => {
+      if (editorForm.elements[key]) editorForm.elements[key].value = value;
+    });
+    clearDraftMedia();
+    renderCategorySelect();
+    refreshPreview();
+    status.textContent = wasEdit ? 'Changes saved.' : 'Published to Athar’s Shelf.';
+  } catch (err) {
+    status.textContent = err.message || 'Could not save that website.';
   }
-  renderFilters();
-  renderSites();
-  renderDash();
-  const wasEdit = editingSiteIndex !== null;
-  editingSiteIndex = null;
-  $('#add h2').textContent = 'Add a website.';
-  editorForm.querySelector('[type="submit"]').innerHTML = 'Publish to shelf <span>↗</span>';
-  editorForm.reset();
-  Object.entries(lookDefaults).forEach(([key, value]) => {
-    if (editorForm.elements[key]) editorForm.elements[key].value = value;
-  });
-  clearDraftMedia();
-  renderCategorySelect();
-  refreshPreview();
-  $('#addStatus').textContent = wasEdit ? 'Changes saved.' : 'Published to Athar’s Shelf.';
 };
 
-$('#categoryForm').onsubmit = (e) => {
+$('#categoryForm').onsubmit = async (e) => {
   e.preventDefault();
   const name = String(new FormData(e.target).get('name') || '').trim();
   const status = $('#categoryStatus');
@@ -1882,16 +1978,21 @@ $('#categoryForm').onsubmit = (e) => {
     status.textContent = 'That category already exists.';
     return;
   }
-  categories.push({ id, label: name });
-  saveCategories();
-  e.target.reset();
-  status.textContent = `“${name}” added.`;
-  renderFilters();
-  renderCategorySelect(id);
-  renderDash();
+  const category = { id, label: name };
+  try {
+    if (supabaseReady) await upsertCategory(category);
+    categories.push(category);
+    e.target.reset();
+    status.textContent = `“${name}” added.`;
+    renderFilters();
+    renderCategorySelect(id);
+    renderDash();
+  } catch (err) {
+    status.textContent = err.message || 'Could not add category.';
+  }
 };
 
-$('#categoryList').onclick = (e) => {
+$('#categoryList').onclick = async (e) => {
   const button = e.target.closest('[data-remove-category]');
   if (!button) return;
   const id = button.dataset.removeCategory;
@@ -1900,18 +2001,28 @@ $('#categoryList').onclick = (e) => {
   if (used && !confirm(`Remove “${categoryLabel(id)}”? ${used} site${used === 1 ? '' : 's'} will move to Studios.`)) {
     return;
   }
-  categories = categories.filter((cat) => cat.id !== id);
-  saveCategories();
-  if (used) {
-    sites = sites.map((site) => (site.category === id ? { ...site, category: 'studio' } : site));
-    set('athar-shelf-sites', sites);
+  try {
+    if (supabaseReady) await deleteCategory(id);
+    categories = categories.filter((cat) => cat.id !== id);
+    if (used) {
+      sites = sites.map((site) => (site.category === id ? { ...site, category: 'studio' } : site));
+      if (supabaseReady) {
+        await Promise.all(
+          sites
+            .filter((site) => site.category === 'studio' && site.id)
+            .map((site, i) => upsertSite(site, i))
+        );
+      }
+    }
+    if (activeFilter === id) activeFilter = 'all';
+    $('#categoryStatus').textContent = 'Category removed.';
+    renderFilters();
+    renderCategorySelect();
+    renderSites();
+    renderDash();
+  } catch (err) {
+    $('#categoryStatus').textContent = err.message || 'Could not remove category.';
   }
-  if (activeFilter === id) activeFilter = 'all';
-  $('#categoryStatus').textContent = 'Category removed.';
-  renderFilters();
-  renderCategorySelect();
-  renderSites();
-  renderDash();
 };
 
 $('#ideaUpload')?.addEventListener('change', async (e) => {
@@ -1934,74 +2045,77 @@ $('#clearIdeaUpload')?.addEventListener('click', () => {
   if (form?.elements.image) form.elements.image.value = '';
 });
 
-$('#ideaForm')?.addEventListener('submit', (e) => {
+$('#ideaForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!isAdmin()) return;
   const form = e.target;
   const data = Object.fromEntries(new FormData(form));
-  const image = draftIdeaImage || String(data.image || '').trim();
   const status = $('#ideaStatus');
-  if (!image) {
-    status.textContent = 'Upload an image or paste an image URL.';
-    return;
-  }
-  const access = data.access === 'paid' ? 'paid' : 'free';
-  const idea = {
-    id: `idea-${Date.now()}`,
-    title: String(data.title || '').trim(),
-    type: String(data.type || '').trim(),
-    access,
-    price: access === 'paid' ? Number(data.price) || 0 : undefined,
-    image,
-    createdAt: Date.now(),
-  };
-  ideas.unshift(idea);
+  status.textContent = 'Publishing…';
   try {
-    saveIdeas();
-  } catch {
-    ideas.shift();
-    status.textContent = 'Image is too large for browser storage. Try a smaller file.';
-    return;
+    let image = String(data.image || '').trim();
+    if (draftIdeaImage?.startsWith('data:')) {
+      const uploaded = await uploadDataUrl('ideas', draftIdeaImage, 'idea.jpg');
+      image = uploaded.url;
+    } else if (draftIdeaImage) {
+      image = draftIdeaImage;
+    }
+    if (!image) {
+      status.textContent = 'Upload an image or paste an image URL.';
+      return;
+    }
+    const access = data.access === 'paid' ? 'paid' : 'free';
+    const idea = {
+      id: `idea-${Date.now()}`,
+      title: String(data.title || '').trim(),
+      type: String(data.type || '').trim(),
+      access,
+      price: access === 'paid' ? Number(data.price) || 0 : undefined,
+      image,
+      createdAt: Date.now(),
+    };
+    if (supabaseReady) {
+      const saved = await upsertIdea(idea, 0);
+      ideas.unshift(saved);
+    } else {
+      ideas.unshift(idea);
+    }
+    form.reset();
+    clearIdeaDraft();
+    status.textContent = 'Idea published to the pinboard.';
+    renderIdeas();
+    renderDash();
+  } catch (err) {
+    status.textContent = err.message || 'Could not publish that idea.';
   }
-  form.reset();
-  clearIdeaDraft();
-  status.textContent = 'Idea published to the pinboard.';
-  renderIdeas();
-  renderDash();
 });
 
-$('#ideaManageList')?.addEventListener('click', (e) => {
+$('#ideaManageList')?.addEventListener('click', async (e) => {
   const button = e.target.closest('[data-remove-idea]');
   if (!button || !isAdmin()) return;
   const index = Number(button.dataset.removeIdea);
   if (!Number.isInteger(index) || !ideas[index]) return;
   if (!confirm(`Remove “${ideas[index].title}” from the pinboard?`)) return;
-  const [removed] = ideas.splice(index, 1);
-  const notes = getIdeaNotes();
-  if (removed?.id && notes[removed.id]) {
-    delete notes[removed.id];
-    saveIdeaNotes(notes);
+  const removed = ideas[index];
+  try {
+    if (supabaseReady && removed?.id) await deleteIdea(removed.id);
+    ideas.splice(index, 1);
+    const notes = getIdeaNotes();
+    if (removed?.id && notes[removed.id]) {
+      delete notes[removed.id];
+      saveIdeaNotes(notes);
+    }
+    renderIdeas();
+    renderDash();
+  } catch (err) {
+    alert(err.message || 'Could not remove that idea.');
   }
-  saveIdeas();
-  renderIdeas();
-  renderDash();
 });
 
 $('#userManageList')?.addEventListener('click', (e) => {
   const button = e.target.closest('[data-remove-user]');
   if (!button || !isAdmin()) return;
-  const index = Number(button.dataset.removeUser);
-  const users = getUsers();
-  if (!Number.isInteger(index) || !users[index]) return;
-  if (!confirm(`Remove member “${users[index].email}”?`)) return;
-  const [removed] = users.splice(index, 1);
-  saveUsers(users);
-  const session = getMemberSession();
-  if (session?.email && removed?.email === session.email) {
-    setMemberSession(null);
-    syncAccountUi();
-  }
-  renderDash();
+  alert('Remove members from the Supabase Auth dashboard (Authentication → Users).');
 });
 
 const MODEL_MAX_BYTES = 150 * 1024 * 1024;
@@ -2027,6 +2141,10 @@ $('#modelForm').onsubmit = async (e) => {
   const data = Object.fromEntries(new FormData(form));
   const file = form.elements.modelFile?.files?.[0];
   const status = $('#modelStatus');
+  if (!isAdmin()) {
+    status.textContent = 'Admin login required.';
+    return;
+  }
   if (!file) {
     status.textContent = 'Choose a .glb or .gltf file.';
     return;
@@ -2040,28 +2158,34 @@ $('#modelForm').onsubmit = async (e) => {
     status.textContent = `Model is too large (max 150MB). This file is ${formatFileSize(file.size)}.`;
     return;
   }
+  if (!supabaseReady) {
+    status.textContent = 'Configure Supabase in .env before uploading models.';
+    return;
+  }
 
   status.textContent = file.size > 20 * 1024 * 1024 ? 'Uploading large model… this can take a moment.' : 'Uploading…';
   const id = `model-${Date.now()}`;
   try {
-    await saveModelBlob(id, file, file.name, file.type || 'model/gltf-binary');
-    modelMeta.unshift({
+    const upload = await uploadModelFile(file);
+    const saved = await upsertModel({
       id,
       title: String(data.title || '').trim(),
       note: String(data.note || '').trim(),
       filename: file.name,
+      storagePath: upload.path,
+      src: upload.url,
       size: file.size,
-      createdAt: Date.now(),
+      sample: false,
     });
-    setModelMeta(modelMeta);
+    modelMeta.unshift(saved);
     form.reset();
     $('#modelFileName').textContent = 'No file chosen.';
     status.textContent = 'Model published to the shelf.';
     renderDash();
     await renderModels();
     renderHomeModels();
-  } catch {
-    status.textContent = 'Could not save that model. Try a smaller file, or free some browser storage.';
+  } catch (err) {
+    status.textContent = err.message || 'Could not save that model.';
   }
 };
 
@@ -2069,45 +2193,123 @@ $('#modelManageList').onclick = async (e) => {
   const button = e.target.closest('[data-remove-model]');
   if (!button) return;
   const id = button.dataset.removeModel;
-  modelMeta = modelMeta.filter((m) => m.id !== id);
-  setModelMeta(modelMeta);
-  if (modelObjectUrls.has(id)) {
-    URL.revokeObjectURL(modelObjectUrls.get(id));
-    modelObjectUrls.delete(id);
-  }
   try {
     await deleteModelBlob(id);
-  } catch {
-    /* ignore */
+    modelMeta = modelMeta.filter((m) => m.id !== id);
+    if (modelObjectUrls.has(id)) {
+      URL.revokeObjectURL(modelObjectUrls.get(id));
+      modelObjectUrls.delete(id);
+    }
+    renderDash();
+    await renderModels();
+    renderHomeModels();
+  } catch (err) {
+    alert(err.message || 'Could not remove that model.');
   }
-  renderDash();
+};
+
+$('#contactForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const payload = Object.fromEntries(new FormData(e.target));
+  try {
+    if (supabaseReady) await insertMessage(payload);
+    messages.unshift(payload);
+    renderDash();
+    e.target.reset();
+    $('#formStatus').textContent = 'Message sent — thank you.';
+  } catch (err) {
+    $('#formStatus').textContent = err.message || 'Could not send message.';
+  }
+};
+
+function showConfigBanner() {
+  if (document.getElementById('supabaseBanner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'supabaseBanner';
+  banner.style.cssText =
+    'position:fixed;left:16px;right:16px;bottom:16px;z-index:200;background:#1f201e;color:#f5f1ea;padding:14px 16px;font:13px/1.4 \"DM Sans\",sans-serif;border-left:4px solid #ff7556;box-shadow:0 12px 40px rgba(0,0,0,.25)';
+  banner.innerHTML =
+    'Supabase is not configured yet. Copy <code>.env.example</code> → <code>.env</code>, add your project URL + anon key, run <code>supabase/schema.sql</code>, then restart the dev server.';
+  document.body.appendChild(banner);
+}
+
+async function applyShelfData(data) {
+  sites = normalizeSites(data.sites?.length ? data.sites : defaults);
+  ideas = normalizeIdeas(data.ideas?.length ? data.ideas : defaultIdeas);
+  categories = data.categories?.length ? data.categories : loadCategories();
+  modelMeta = data.models?.length ? data.models : ensureSampleModels([]);
+  messages = data.messages || [];
+  if (!data.usersError && data.users) saveUsers(data.users);
+  ideaNotesCache = Object.keys(buildIdeaNotes(data.likes, data.comments)).length
+    ? buildIdeaNotes(data.likes, data.comments)
+    : { ...ideaSeedNotes };
+}
+
+async function boot() {
+  renderSitesSkeleton();
+  renderModelsSkeleton();
+  syncCoverUploadUi();
+  renderGalleryUploads();
+  refreshPreview();
+  syncModelDownloadUi();
+
+  if (!isSupabaseConfigured) {
+    showConfigBanner();
+    sites = normalizeSites(defaults);
+    ideas = normalizeIdeas(defaultIdeas);
+    modelMeta = ensureSampleModels([]);
+    categories = loadCategories();
+    ideaNotesCache = { ...ideaSeedNotes };
+  } else {
+    try {
+      currentProfile = await fetchProfile();
+      let data = await loadShelf();
+      if ((!data.sites.length || !data.ideas.length || !data.models.length) && isAdmin()) {
+        await seedDefaults({
+          sites: defaults,
+          ideas: defaultIdeas,
+          models: defaultModels,
+          categories: defaultCategories,
+        });
+        data = await loadShelf();
+      }
+      supabaseReady = true;
+      await applyShelfData(data);
+      if (!data.sites.length) sites = normalizeSites(defaults);
+      if (!data.ideas.length) ideas = normalizeIdeas(defaultIdeas);
+      if (!data.models.length) modelMeta = ensureSampleModels([]);
+    } catch (err) {
+      console.error(err);
+      showConfigBanner();
+      sites = normalizeSites(defaults);
+      ideas = normalizeIdeas(defaultIdeas);
+      modelMeta = ensureSampleModels([]);
+      categories = loadCategories();
+      ideaNotesCache = { ...ideaSeedNotes };
+    }
+  }
+
+  renderFilters();
+  renderCategorySelect();
+  renderSites();
   await renderModels();
   renderHomeModels();
-};
-
-$('#contactForm').onsubmit = (e) => {
-  e.preventDefault();
-  messages.unshift(Object.fromEntries(new FormData(e.target)));
-  set('athar-shelf-messages', messages);
+  renderIdeas();
   renderDash();
-  e.target.reset();
-  $('#formStatus').textContent = 'Message sent — thank you.';
-};
+  syncAccountUi();
+  syncHeaderHeight();
+  setActivePage();
 
-renderFilters();
-renderCategorySelect();
-renderSites();
-renderModels();
-renderHomeModels();
-renderIdeas();
-renderDash();
-syncCoverUploadUi();
-renderGalleryUploads();
-refreshPreview();
-syncModelDownloadUi();
-syncAccountUi();
+  if (supabase) {
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      currentProfile = session ? await fetchProfile() : null;
+      syncAccountUi();
+      if (isAdmin()) await maybeSeedAsAdmin();
+      renderDash();
+    });
+  }
+}
 
 window.addEventListener('hashchange', setActivePage);
 window.addEventListener('resize', syncHeaderHeight);
-syncHeaderHeight();
-setActivePage();
+boot();

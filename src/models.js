@@ -1,60 +1,52 @@
-const DB_NAME = 'athar-shelf-db';
-const DB_VERSION = 1;
-const STORE = 'models';
-const META_KEY = 'athar-shelf-models';
+import { deleteModel as deleteModelRow, publicMediaUrl, removeMedia, supabase, upsertModel, uploadMedia } from './lib/db.js';
 
-function openDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'id' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+export async function uploadModelFile(file) {
+  return uploadMedia('models', file, file.name);
 }
 
-export function getModelMeta() {
-  return JSON.parse(localStorage.getItem(META_KEY) || '[]');
-}
-
-export function setModelMeta(list) {
-  localStorage.setItem(META_KEY, JSON.stringify(list));
-}
-
-export async function saveModelBlob(id, blob, filename, type) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put({ id, blob, filename, type });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+export async function saveModelRecord(meta) {
+  return upsertModel(meta);
 }
 
 export async function getModelBlob(id) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const request = tx.objectStore(STORE).get(id);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
+  if (!supabase) return null;
+  const { data: row, error } = await supabase.from('models').select('*').eq('id', id).maybeSingle();
+  if (error || !row) return null;
+  const url = row.src_url || (row.storage_path ? publicMediaUrl(row.storage_path) : '');
+  if (!url) return null;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  const blob = await response.blob();
+  return { id, blob, filename: row.filename, type: blob.type };
 }
 
 export async function deleteModelBlob(id) {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  if (!supabase) return;
+  const { data: row } = await supabase.from('models').select('storage_path').eq('id', id).maybeSingle();
+  if (row?.storage_path) await removeMedia(row.storage_path);
+  await deleteModelRow(id);
 }
 
 export function createObjectUrl(blob) {
   return URL.createObjectURL(blob);
+}
+
+export function getModelMeta() {
+  return [];
+}
+
+export function setModelMeta() {}
+
+/** @deprecated use uploadModelFile + saveModelRecord */
+export async function saveModelBlob(id, file, filename) {
+  const upload = await uploadModelFile(file);
+  return saveModelRecord({
+    id,
+    title: filename || file.name,
+    filename: filename || file.name,
+    storagePath: upload.path,
+    src: upload.url,
+    size: file.size,
+    sample: false,
+  });
 }
