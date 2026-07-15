@@ -74,6 +74,8 @@ A trigger promotes that email to `profiles.role = 'admin'`.
 
 Files upload to Storage bucket `media` under `covers/`, `gallery/`, `ideas/`, and `models/`.
 
+**3D upload size:** Free Supabase projects hard-cap uploads at **50MB** (global Storage setting), even if the bucket limit is higher. For 300MB models, upgrade to **Pro**, then set **Storage → Settings → Global file size limit** to 300MB (and keep the `media` bucket at 314572800).
+
 ## 6. Verify
 
 1. `npm run dev` — banner gone when `.env` is set  

@@ -123,7 +123,8 @@ footer{
 .manage-actions .delete{border-color:#c44;color:#c44}
 .user-edit-row{display:flex;flex-wrap:wrap;gap:8px;width:100%;margin-top:10px}
 .user-edit-row input{flex:1;min-width:180px;padding:10px 12px;border:1px solid rgba(0,0,0,.14);font:inherit}
-.idea-form,.model-form{max-width:560px;margin-bottom:40px}
+.idea-form{max-width:560px;margin-bottom:40px}
+.model-form{margin-bottom:0}
 
 .idea-panel-access a{color:var(--ink);text-underline-offset:3px}
 .idea-download-hint a{color:var(--ink);text-underline-offset:3px}

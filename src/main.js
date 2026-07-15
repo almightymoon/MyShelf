@@ -30,6 +30,7 @@ import {
   upsertIdea,
   upsertModel,
   upsertSite,
+  removeMedia,
 } from './lib/db.js';
 import {
   createObjectUrl,
@@ -1022,11 +1023,106 @@ function renderModelManageList() {
   if (!list) return;
   list.innerHTML =
     modelMeta
-      .map(
-        (m, i) =>
-          `<div class="manage-item"><div><h3>${escapeHtml(m.title)}</h3><p>${escapeHtml(m.filename || '3D model')}${m.size ? ` · ${formatFileSize(m.size)}` : ''}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</p></div><button type="button" class="delete" data-remove-model="${escapeHtml(m.id)}">Remove</button></div>`
-      )
-      .join('') || '<p>No 3D models yet.</p>';
+      .map((m) => {
+        const size = m.size ? formatFileSize(m.size) : '';
+        const metaLine = [m.filename || '3D model', size].filter(Boolean).join(' · ');
+        return `<article class="model-manage-card" data-model-id="${escapeHtml(m.id)}">
+          <div class="model-manage-thumb" aria-hidden="true">
+            <span>GLB</span>
+            <model-viewer id="admin-mv-${escapeHtml(m.id)}" auto-rotate interaction-prompt="none" shadow-intensity="0.4" exposure="1" style="display:none"></model-viewer>
+          </div>
+          <div class="model-manage-meta">
+            <h3>${escapeHtml(m.title)}</h3>
+            <p>${escapeHtml(metaLine)}</p>
+            ${m.note ? `<p>${escapeHtml(m.note)}</p>` : ''}
+          </div>
+          <div class="model-manage-actions">
+            <button type="button" data-preview-model="${escapeHtml(m.id)}">Preview</button>
+            <button type="button" data-edit-model="${escapeHtml(m.id)}">Edit</button>
+            <button type="button" class="delete" data-remove-model="${escapeHtml(m.id)}">Delete</button>
+          </div>
+        </article>`;
+      })
+      .join('') || '<p class="models-library-empty">No models yet — publish one on the left.</p>';
+
+  modelMeta.forEach(async (m) => {
+    const viewer = document.getElementById(`admin-mv-${m.id}`);
+    if (!viewer) return;
+    try {
+      const src = await resolveModelUrl(m);
+      if (!src) return;
+      viewer.src = src;
+      viewer.style.display = 'block';
+      const label = viewer.parentElement?.querySelector('span');
+      if (label) label.hidden = true;
+    } catch {
+      /* keep placeholder */
+    }
+  });
+}
+
+let editingModelId = null;
+
+function resetModelForm() {
+  editingModelId = null;
+  const form = $('#modelForm');
+  form?.reset();
+  const upload = $('#modelUpload');
+  if (upload) upload.required = true;
+  if ($('#modelFileName')) $('#modelFileName').textContent = 'No file chosen.';
+  if ($('#modelSubmitBtn')) $('#modelSubmitBtn').innerHTML = 'Publish model <span>↗</span>';
+  if ($('#modelCancelEdit')) $('#modelCancelEdit').hidden = true;
+  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Upload model';
+  setModelUploadUi(false);
+}
+
+function setModelUploadUi(active, stage = 'Uploading model…', percent = 0) {
+  const form = $('#modelForm');
+  const wrap = $('#modelUploadProgress');
+  const stageEl = $('#modelUploadStage');
+  const percentEl = $('#modelUploadPercent');
+  const bar = $('#modelUploadBar');
+  if (form) form.classList.toggle('is-uploading', active);
+  if (wrap) wrap.hidden = !active;
+  if (stageEl) stageEl.textContent = stage;
+  if (percentEl) percentEl.textContent = `${Math.round(percent * 100)}%`;
+  if (bar) bar.style.width = `${Math.max(0, Math.min(100, percent * 100))}%`;
+}
+
+function explainModelUploadError(err, fileSize) {
+  const raw = err?.message || String(err || '');
+  if (/exceeded the maximum allowed size|Payload too large|entity too large|max.*size/i.test(raw)) {
+    const size = formatFileSize(fileSize);
+    return `Upload blocked at ${size}. Check MAX_UPLOAD_MB on the API (default 300MB) and that MinIO is running.`;
+  }
+  return raw || 'Could not save that model.';
+}
+
+function beginEditModel(id) {
+  const model = modelMeta.find((m) => m.id === id);
+  const form = $('#modelForm');
+  if (!model || !form) return;
+  editingModelId = id;
+  form.elements.title.value = model.title || '';
+  form.elements.note.value = model.note || '';
+  const upload = $('#modelUpload');
+  if (upload) {
+    upload.value = '';
+    upload.required = false;
+  }
+  if ($('#modelFileName')) {
+    $('#modelFileName').textContent = model.filename
+      ? `Keeping ${model.filename}${model.size ? ` · ${formatFileSize(model.size)}` : ''} — choose a file only to replace it.`
+      : 'Choose a file only if you want to replace the model.';
+  }
+  if ($('#modelSubmitBtn')) $('#modelSubmitBtn').innerHTML = 'Save changes <span>↗</span>';
+  if ($('#modelCancelEdit')) $('#modelCancelEdit').hidden = false;
+  if ($('#modelUploadLabel')) $('#modelUploadLabel').textContent = 'Replace model';
+  if ($('#modelStatus')) {
+    $('#modelStatus').textContent = '';
+    $('#modelStatus').classList.remove('error');
+  }
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function renderModels() {
@@ -1762,12 +1858,12 @@ $('#memberLoginForm')?.addEventListener('submit', async (e) => {
     if (note) {
       if (/email not confirmed/i.test(msg)) {
         note.innerHTML =
-          'Email not confirmed yet. In Supabase → <b>Authentication → Users</b>, open your user and click <b>Confirm email</b> (or disable Confirm email under Providers).';
+          'Email confirmation is not required on the VPS stack. Check the password or admin seed.';
       } else if (/blocked/i.test(msg)) {
         note.textContent = 'This account has been blocked from Athar’s Shelf.';
       } else if (/invalid login credentials/i.test(msg) && email === ADMIN.email.toLowerCase()) {
         note.innerHTML =
-          'No admin account yet. <a href="#signup">Sign up</a> with this email first (same password), after running <code>supabase/bootstrap.sql</code>.';
+          'No admin account yet. The VPS API seeds admin on boot — check ADMIN_EMAIL / ADMIN_PASSWORD in <code>.env</code>.';
       } else if (/invalid login credentials/i.test(msg)) {
         note.innerHTML = 'Wrong email or password — or create an account on <a href="#signup">Sign up</a>.';
       } else {
@@ -2180,7 +2276,7 @@ $('#userForm')?.addEventListener('submit', async (e) => {
     status.classList.remove('error');
   }
   try {
-    if (!supabaseReady) throw new Error('Supabase is not ready. Run supabase/users-admin.sql first.');
+    if (!supabaseReady) throw new Error('API is not ready. Start docker compose (see DEPLOY.md).');
     await createMember({ name, email, password });
     form.reset();
     await refreshUsersFromShelf();
@@ -2264,7 +2360,7 @@ $('#userManageList')?.addEventListener('click', async (e) => {
       saveUsers(users);
       renderDash();
     } catch (err) {
-      alert(err.message || 'Could not remove that member. Run supabase/users-admin.sql if you haven’t.');
+      alert(err.message || 'Could not remove that member.');
     }
   }
 });
@@ -2279,12 +2375,24 @@ function formatFileSize(bytes) {
 
 $('#modelUpload').onchange = (e) => {
   const file = e.target.files?.[0];
+  const status = $('#modelStatus');
   if (!file) {
-    $('#modelFileName').textContent = 'No file chosen.';
+    $('#modelFileName').textContent = editingModelId
+      ? 'Choose a file only if you want to replace the model.'
+      : 'No file chosen.';
     return;
   }
   $('#modelFileName').textContent = `${file.name} · ${formatFileSize(file.size)}`;
+  if (status) {
+    status.textContent = '';
+    status.classList.remove('error');
+  }
 };
+
+$('#modelCancelEdit')?.addEventListener('click', () => {
+  resetModelForm();
+  if ($('#modelStatus')) $('#modelStatus').textContent = '';
+});
 
 $('#modelForm').onsubmit = async (e) => {
   e.preventDefault();
@@ -2292,61 +2400,116 @@ $('#modelForm').onsubmit = async (e) => {
   const data = Object.fromEntries(new FormData(form));
   const file = form.elements.modelFile?.files?.[0];
   const status = $('#modelStatus');
+  const submitBtn = $('#modelSubmitBtn');
   if (!isAdmin()) {
     status.textContent = 'Admin login required.';
     return;
   }
-  if (!file) {
+  if (!editingModelId && !file) {
     status.textContent = 'Choose a .glb or .gltf file.';
     return;
   }
-  const lower = file.name.toLowerCase();
-  if (!lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
-    status.textContent = 'Please upload a .glb or .gltf model.';
-    return;
-  }
-  if (file.size > MODEL_MAX_BYTES) {
-    status.textContent = `Model is too large (max 300MB). This file is ${formatFileSize(file.size)}.`;
-    return;
+  if (file) {
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.glb') && !lower.endsWith('.gltf')) {
+      status.textContent = 'Please upload a .glb or .gltf model.';
+      return;
+    }
+    if (file.size > MODEL_MAX_BYTES) {
+      status.textContent = `Model is too large (max 300MB). This file is ${formatFileSize(file.size)}.`;
+      return;
+    }
   }
   if (!supabaseReady) {
     status.textContent = 'Configure Supabase in .env before uploading models.';
     return;
   }
 
-  status.textContent = file.size > 20 * 1024 * 1024 ? 'Uploading large model… this can take a moment.' : 'Uploading…';
-  const id = `model-${Date.now()}`;
+  status.classList.remove('error');
+  status.textContent = '';
+  if (submitBtn) submitBtn.disabled = true;
+
+  const id = editingModelId || `model-${Date.now()}`;
+  const wasEdit = Boolean(editingModelId);
+  const existing = editingModelId ? modelMeta.find((m) => m.id === editingModelId) : null;
+
   try {
-    const upload = await uploadModelFile(file);
+    let storagePath = existing?.storagePath || '';
+    let src = existing?.src || '';
+    let filename = existing?.filename || '';
+    let size = existing?.size || 0;
+
+    if (file) {
+      setModelUploadUi(true, 'Preparing upload…', 0.02);
+      const upload = await uploadModelFile(file, (ratio) => {
+        setModelUploadUi(true, 'Uploading model…', Math.max(0.02, ratio * 0.92));
+      });
+      setModelUploadUi(true, 'Saving to the shelf…', 0.96);
+      if (existing?.storagePath && existing.storagePath !== upload.path) {
+        try {
+          await removeMedia(existing.storagePath);
+        } catch {
+          /* ignore stale file cleanup */
+        }
+      }
+      storagePath = upload.path;
+      src = upload.url;
+      filename = file.name;
+      size = file.size;
+    } else {
+      setModelUploadUi(true, 'Saving changes…', 0.5);
+    }
+
     const saved = await upsertModel({
       id,
       title: String(data.title || '').trim(),
       note: String(data.note || '').trim(),
-      filename: file.name,
-      storagePath: upload.path,
-      src: upload.url,
-      size: file.size,
-      sample: false,
+      filename,
+      storagePath,
+      src,
+      size,
+      sample: Boolean(existing?.sample),
     });
-    modelMeta.unshift(saved);
-    form.reset();
-    $('#modelFileName').textContent = 'No file chosen.';
-    status.textContent = 'Model published to the shelf.';
+
+    const index = modelMeta.findIndex((m) => m.id === id);
+    if (index >= 0) modelMeta[index] = saved;
+    else modelMeta.unshift(saved);
+
+    setModelUploadUi(true, 'Published', 1);
+    resetModelForm();
+    status.textContent = wasEdit ? 'Model updated.' : 'Model published to the shelf.';
     renderDash();
     await renderModels();
     renderHomeModels();
   } catch (err) {
-    status.textContent = err.message || 'Could not save that model.';
+    status.textContent = explainModelUploadError(err, file?.size);
+    status.classList.add('error');
+  } finally {
+    setModelUploadUi(false);
+    if (submitBtn) submitBtn.disabled = false;
   }
 };
 
 $('#modelManageList').onclick = async (e) => {
-  const button = e.target.closest('[data-remove-model]');
-  if (!button) return;
-  const id = button.dataset.removeModel;
+  const preview = e.target.closest('[data-preview-model]');
+  const edit = e.target.closest('[data-edit-model]');
+  const remove = e.target.closest('[data-remove-model]');
+  if (preview) {
+    await openModelDetail(preview.dataset.previewModel);
+    return;
+  }
+  if (edit) {
+    beginEditModel(edit.dataset.editModel);
+    return;
+  }
+  if (!remove) return;
+  const id = remove.dataset.removeModel;
+  const model = modelMeta.find((m) => m.id === id);
+  if (!confirm(`Delete “${model?.title || 'this model'}” from the shelf?`)) return;
   try {
     await deleteModelBlob(id);
     modelMeta = modelMeta.filter((m) => m.id !== id);
+    if (editingModelId === id) resetModelForm();
     if (modelObjectUrls.has(id)) {
       URL.revokeObjectURL(modelObjectUrls.get(id));
       modelObjectUrls.delete(id);
@@ -2407,7 +2570,7 @@ async function boot() {
 
   if (!isSupabaseConfigured) {
     showConfigBanner(
-      'Supabase env vars are missing. Locally: add <code>VITE_SUPABASE_URL</code> + <code>VITE_SUPABASE_ANON_KEY</code> to <code>.env</code>. On Vercel: set those same names (or keep the Supabase integration’s <code>NEXT_PUBLIC_SUPABASE_*</code> vars) and redeploy.'
+      'VITE_API_URL is missing. Copy <code>.env.example</code> → <code>.env</code> and set <code>VITE_API_URL</code> to your VPS API (e.g. http://localhost:4000), then restart Vite.'
     );
     sites = normalizeSites(defaults);
     ideas = normalizeIdeas(defaultIdeas);
@@ -2446,7 +2609,7 @@ async function boot() {
       console.error(err);
       const detail = err?.message || String(err);
       showConfigBanner(
-        `Connected to Supabase, but loading failed: <code>${detail}</code>. Usually the schema isn’t applied yet — run <code>supabase/schema.sql</code> in the SQL Editor, then refresh.`
+        `Connected to the API, but loading failed: <code>${detail}</code>. Start the VPS stack with <code>docker compose up -d</code> (see <code>DEPLOY.md</code>).`
       );
       sites = normalizeSites(defaults);
       ideas = normalizeIdeas(defaultIdeas);

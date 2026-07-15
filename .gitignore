@@ -1,7 +1,10 @@
 .env
-.env.*
+.env.local
+.env.*.local
 !.env.example
+!.env.vps.example
 node_modules
+server/node_modules
 dist
 .DS_Store
 *.local

@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:dev": "npm --prefix server run dev",
+    "api:install": "npm --prefix server install",
+    "stack:up": "docker compose up -d --build",
+    "stack:down": "docker compose down"
   },
   "devDependencies": {
     "vite": "^6.3.5"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.78.0"
   }
 }

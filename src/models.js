@@ -1,7 +1,8 @@
-import { deleteModel as deleteModelRow, publicMediaUrl, removeMedia, supabase, upsertModel, uploadMedia } from './lib/db.js';
+import { isApiConfigured, api } from './lib/api.js';
+import { deleteModel as deleteModelRow, removeMedia, upsertModel, uploadMedia } from './lib/db.js';
 
-export async function uploadModelFile(file) {
-  return uploadMedia('models', file, file.name);
+export async function uploadModelFile(file, onProgress) {
+  return uploadMedia('models', file, file.name, onProgress);
 }
 
 export async function saveModelRecord(meta) {
@@ -9,21 +10,17 @@ export async function saveModelRecord(meta) {
 }
 
 export async function getModelBlob(id) {
-  if (!supabase) return null;
-  const { data: row, error } = await supabase.from('models').select('*').eq('id', id).maybeSingle();
-  if (error || !row) return null;
-  const url = row.src_url || (row.storage_path ? publicMediaUrl(row.storage_path) : '');
-  if (!url) return null;
-  const response = await fetch(url);
+  if (!isApiConfigured) return null;
+  const shelf = await api('/api/shelf');
+  const row = (shelf.models || []).find((m) => m.id === id);
+  if (!row?.src) return null;
+  const response = await fetch(row.src);
   if (!response.ok) return null;
   const blob = await response.blob();
   return { id, blob, filename: row.filename, type: blob.type };
 }
 
 export async function deleteModelBlob(id) {
-  if (!supabase) return;
-  const { data: row } = await supabase.from('models').select('storage_path').eq('id', id).maybeSingle();
-  if (row?.storage_path) await removeMedia(row.storage_path);
   await deleteModelRow(id);
 }
 
@@ -37,7 +34,6 @@ export function getModelMeta() {
 
 export function setModelMeta() {}
 
-/** @deprecated use uploadModelFile + saveModelRecord */
 export async function saveModelBlob(id, file, filename) {
   const upload = await uploadModelFile(file);
   return saveModelRecord({
@@ -50,3 +46,5 @@ export async function saveModelBlob(id, file, filename) {
     sample: false,
   });
 }
+
+export { removeMedia };
