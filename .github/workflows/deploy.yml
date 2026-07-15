@@ -69,10 +69,22 @@ jobs:
             # Stop optional Caddy if it was started earlier and fought Apache
             docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" stop caddy 2>/dev/null || true
 
-            echo "==> Apache vhost"
+            echo "==> Apache :7878 (forex/portfolio on :80/:443 untouched)"
             sudo a2enmod proxy proxy_http rewrite headers ssl 2>/dev/null || true
+            sudo cp "$APP_DIR/deploy/apache/myshelf-port.conf" /etc/apache2/conf-available/myshelf-port.conf
             sudo cp "$APP_DIR/deploy/apache/myshelf.conf" /etc/apache2/sites-available/myshelf.conf
-            sudo a2ensite myshelf.conf
+            sudo cp "$APP_DIR/deploy/apache/myshelf-80-acme.conf" /etc/apache2/sites-available/myshelf-80-acme.conf
+            sudo cp "$APP_DIR/deploy/apache/myshelf-le-ssl.conf" /etc/apache2/sites-available/myshelf-le-ssl.conf
+            sudo a2enconf myshelf-port
+            sudo a2ensite myshelf-80-acme.conf
+            if [ -f /etc/letsencrypt/live/myshelf.athariqbal.com/fullchain.pem ]; then
+              sudo a2dissite myshelf.conf 2>/dev/null || true
+              sudo a2ensite myshelf-le-ssl.conf
+            else
+              sudo a2dissite myshelf-le-ssl.conf 2>/dev/null || true
+              sudo a2ensite myshelf.conf
+            fi
+            sudo ufw allow 7878/tcp 2>/dev/null || true
             sudo apache2ctl configtest
             sudo systemctl reload apache2
 
@@ -89,8 +101,9 @@ jobs:
               docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" logs --tail=80 api || true
               exit 1
             fi
-            curl -fsS http://127.0.0.1:4010/api/health
-            echo
+            curl -fsS http://127.0.0.1:4010/api/health; echo
+            curl -fsS http://127.0.0.1:7878/api/health; echo
             docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" ps
-            echo "==> Deploy complete. Point DNS A record for myshelf.athariqbal.com → this server, then:"
-            echo "    sudo certbot --apache -d myshelf.athariqbal.com"
+            echo "==> Live: http://72.60.193.51:7878"
+            echo "    For SSL: point myshelf.athariqbal.com A → 72.60.193.51 then:"
+            echo "    certbot certonly --webroot -w /var/www/MyShelf/dist -d myshelf.athariqbal.com --agree-tos -m atharqulimoon@gmail.com && a2dissite myshelf.conf && a2ensite myshelf-le-ssl.conf && systemctl reload apache2"
