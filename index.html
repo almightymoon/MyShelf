@@ -14,6 +14,7 @@
     <a class="logo" href="#top">A<span>.</span></a>
     <nav>
       <a href="#top">Discover</a>
+      <a href="#models">3D models</a>
       <a href="#creator">About Athar</a>
       <a href="#contact">Say hello</a>
     </nav>
@@ -40,13 +41,7 @@
         <input id="search" placeholder="Search Athar's shelf" autocomplete="off">
         <kbd>⌘ K</kbd>
       </div>
-      <div class="chips" id="filters">
-        <button class="active" data-filter="all">All websites <b id="siteCount">06</b></button>
-        <button data-filter="studio">Studios</button>
-        <button data-filter="portfolio">Portfolio</button>
-        <button data-filter="culture">Culture</button>
-        <button data-filter="shop">Shops</button>
-      </div>
+      <div class="chips" id="filters"></div>
       <button class="sort" id="sortBtn">Newest <span>⌄</span></button>
     </section>
 
@@ -56,6 +51,17 @@
         <span>Hover to preview ↗</span>
       </div>
       <div class="site-grid" id="siteGrid"></div>
+    </section>
+
+    <section class="models-section" id="models">
+      <div class="models-head">
+        <div>
+          <p class="eyebrow">ATHAR'S MODELS</p>
+          <h2>3D on<br>the shelf.</h2>
+        </div>
+        <p>Drag to orbit. Scroll to zoom. A few pieces worth keeping in the round.</p>
+      </div>
+      <div class="models-grid" id="modelsGrid"></div>
     </section>
 
     <section class="creator" id="creator">
@@ -110,6 +116,8 @@
       <p class="eyebrow">ATHAR'S SHELF</p>
       <button class="dash-link active" data-panel="add">Add website</button>
       <button class="dash-link" data-panel="manage">Collection <b id="manageCount"></b></button>
+      <button class="dash-link" data-panel="modelsAdmin">3D models <b id="modelCount"></b></button>
+      <button class="dash-link" data-panel="categories">Categories <b id="categoryCount"></b></button>
       <button class="dash-link" data-panel="inbox">Messages <b id="messageCount"></b></button>
       <button id="signout" type="button">Sign out ↗</button>
     </aside>
@@ -120,18 +128,42 @@
         <h2>Add a website.</h2>
         <form id="addSiteForm">
           <label>Website name<input name="title" required placeholder="e.g. Studio Koto"></label>
+          <label>Card line <small>(under the title)</small><input name="blurb" placeholder="e.g. Soft colours, sharp perspective."></label>
           <label>Website URL<input name="url" type="url" required placeholder="https://"></label>
           <label>Category
-            <select name="category">
+            <select name="category" id="categorySelect">
               <option value="studio">Studio</option>
               <option value="portfolio">Portfolio</option>
               <option value="culture">Culture</option>
               <option value="shop">Shop</option>
             </select>
           </label>
-          <label>Why it belongs here<textarea name="description" required rows="3" placeholder="A short, honest description"></textarea></label>
-          <label>Cover image URL <small>(optional)</small><input name="image" type="url" placeholder="https://images..."></label>
-          <label>Gallery image URLs <small>(one URL per line)</small><textarea name="gallery" rows="4" placeholder="https://image-one...&#10;https://image-two..."></textarea></label>
+          <label>Short note <small>(Athar’s note on the card & explore)</small><textarea name="description" required rows="3" placeholder="A short, honest description"></textarea></label>
+          <label>Explore note <small>(only shown when someone opens the site)</small><textarea name="exploreNote" rows="4" placeholder="A longer take — what stood out, why it’s worth keeping…"></textarea></label>
+          <div class="media-field">
+            <span class="media-label">Cover image <small>(upload or URL)</small></span>
+            <div class="upload-row">
+              <label class="upload-btn">
+                Upload cover
+                <input id="coverUpload" type="file" accept="image/*" hidden>
+              </label>
+              <button type="button" class="upload-clear" id="clearCover" hidden>Clear</button>
+            </div>
+            <div class="upload-status" id="coverUploadStatus"></div>
+            <input name="image" type="url" placeholder="Or paste an image URL">
+          </div>
+          <div class="media-field">
+            <span class="media-label">Gallery images <small>(upload or URLs)</small></span>
+            <div class="upload-row">
+              <label class="upload-btn">
+                Upload gallery
+                <input id="galleryUpload" type="file" accept="image/*" multiple hidden>
+              </label>
+              <button type="button" class="upload-clear" id="clearGallery" hidden>Clear all</button>
+            </div>
+            <div class="gallery-uploads" id="galleryUploads"></div>
+            <textarea name="gallery" rows="3" placeholder="Or paste image URLs, one per line"></textarea>
+          </div>
           <fieldset class="appearance-controls">
             <legend>Card appearance</legend>
             <div class="colour-controls">
@@ -170,6 +202,7 @@
               </div>
               <div>
                 <h3 id="previewTitle">Your website</h3>
+                <p id="previewBlurb" class="preview-blurb">Short line under the title</p>
                 <p id="previewDescription">Your description will appear here.</p>
               </div>
             </div>
@@ -181,6 +214,37 @@
         <p class="eyebrow">YOUR COLLECTION</p>
         <h2>Websites.</h2>
         <div id="manageList"></div>
+      </div>
+      <div id="modelsAdmin" class="panel">
+        <p class="eyebrow">SPATIAL WORK</p>
+        <h2>3D models.</h2>
+        <form id="modelForm" class="model-form">
+          <label>Model name<input name="title" required placeholder="e.g. Soft chair study"></label>
+          <label>Short note<textarea name="note" rows="3" placeholder="What this model is, or why it’s here"></textarea></label>
+          <div class="media-field">
+            <span class="media-label">Model file <small>(.glb or .gltf)</small></span>
+            <div class="upload-row">
+              <label class="upload-btn">
+                Upload model
+                <input id="modelUpload" name="modelFile" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" required hidden>
+              </label>
+            </div>
+            <p class="model-file-name" id="modelFileName">No file chosen.</p>
+          </div>
+          <button type="submit">Publish model <span>↗</span></button>
+          <p class="form-status" id="modelStatus"></p>
+        </form>
+        <div id="modelManageList"></div>
+      </div>
+      <div id="categories" class="panel">
+        <p class="eyebrow">SHELF LABELS</p>
+        <h2>Categories.</h2>
+        <form id="categoryForm" class="category-form">
+          <label>New category name<input name="name" required placeholder="e.g. Editorial" autocomplete="off"></label>
+          <button type="submit">Add category <span>↗</span></button>
+          <p class="form-status" id="categoryStatus"></p>
+        </form>
+        <div id="categoryList"></div>
       </div>
       <div id="inbox" class="panel">
         <p class="eyebrow">INCOMING</p>
@@ -197,34 +261,98 @@
       <button id="detailClose" aria-label="Close detail" type="button">×</button>
     </div>
     <div class="detail-body">
-      <div class="detail-heading">
-        <div>
-          <p class="eyebrow" id="detailCategory">STUDIO</p>
+      <header class="detail-hero-copy">
+        <p class="eyebrow" id="detailCategory">STUDIO</p>
+        <div class="detail-title-row">
           <h2 id="detailTitle">Website title</h2>
+          <a id="detailVisit" class="detail-visit" target="_blank" rel="noopener">Visit website <span>↗</span></a>
         </div>
-        <a id="detailVisit" target="_blank" rel="noopener">Visit website <span>↗</span></a>
-      </div>
-      <div class="detail-cover">
+        <p class="detail-blurb" id="detailBlurb"></p>
+      </header>
+
+      <figure class="detail-hero">
         <img id="detailImage" alt="">
         <span id="detailIndex">01</span>
-      </div>
-      <div class="detail-info">
-        <div>
+      </figure>
+
+      <section class="detail-meta">
+        <div class="detail-meta-note">
           <p class="eyebrow">ATHAR'S NOTE</p>
           <p id="detailDescription"></p>
         </div>
-        <div>
-          <p class="eyebrow">TYPE OF WORK</p>
-          <div class="detail-tags" id="detailTags"></div>
+        <div class="detail-meta-side">
+          <div>
+            <p class="eyebrow">TYPE OF WORK</p>
+            <div class="detail-tags" id="detailTags"></div>
+          </div>
+          <div>
+            <p class="eyebrow">LINK</p>
+            <a id="detailUrl" target="_blank" rel="noopener"></a>
+          </div>
         </div>
-        <div>
-          <p class="eyebrow">LINK</p>
-          <a id="detailUrl" target="_blank" rel="noopener"></a>
+      </section>
+
+      <section class="detail-highlights" id="detailGallery" hidden>
+        <div class="detail-highlights-head">
+          <p class="eyebrow">ON THE SHELF</p>
+          <h3>Highlights worth<br>stopping for.</h3>
+        </div>
+        <div class="detail-highlights-grid" id="detailThumbs"></div>
+      </section>
+
+      <section class="explore-note" id="exploreNoteBlock" hidden>
+        <p class="eyebrow">A CLOSER LOOK</p>
+        <p id="detailExploreNote"></p>
+      </section>
+    </div>
+  </section>
+
+  <section class="model-detail" id="modelDetail" aria-hidden="true">
+    <div class="detail-top">
+      <span class="detail-mark">A.</span>
+      <span id="modelDetailCrumb">ATHAR'S SHELF / 3D MODEL</span>
+      <button id="modelDetailClose" aria-label="Close model" type="button">×</button>
+    </div>
+    <div class="model-detail-body">
+      <header class="model-detail-copy">
+        <div class="model-detail-kicker">
+          <p class="eyebrow">3D MODEL</p>
+          <span id="modelDetailIndex">01</span>
+        </div>
+        <h2 id="modelDetailTitle">Model title</h2>
+        <p class="model-detail-note" id="modelDetailNote"></p>
+        <div class="model-detail-actions">
+          <button type="button" class="model-download" id="modelDownloadBtn" hidden>Download model <span>↓</span></button>
+          <p class="model-download-hint" id="modelDownloadHint">Owner sign-in unlocks download.</p>
+          <p class="model-orbit-hint">Drag to orbit · Scroll to zoom</p>
+        </div>
+      </header>
+
+      <div class="model-detail-stage">
+        <div class="model-stage-glow" aria-hidden="true"></div>
+        <div class="model-fallback" id="modelDetailFallback">Loading model…</div>
+        <model-viewer
+          id="modelDetailViewer"
+          camera-controls
+          touch-action="pan-y"
+          auto-rotate
+          auto-rotate-delay="0"
+          rotation-per-second="18deg"
+          shadow-intensity="1"
+          shadow-softness="0.8"
+          exposure="1.1"
+          environment-image="neutral"
+          style="display:none"
+        ></model-viewer>
+        <div class="model-stage-meta">
+          <span id="modelDetailFile">.glb</span>
+          <span>Interactive</span>
         </div>
       </div>
     </div>
   </section>
 
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

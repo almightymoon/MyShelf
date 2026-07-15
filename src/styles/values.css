@@ -1,1 +1,1 @@
-.metric-grid b,.board-row>span:not(:first-child),.board-row strong{color:var(--orange)}
+.board-row strong{color:var(--ink)}.metric-grid b{color:var(--ink)}
