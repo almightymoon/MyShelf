@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check required secrets
         run: |
@@ -22,12 +22,13 @@ jobs:
           echo "All required secrets are present"
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.IP }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          command_timeout: 15m
           script: |
             set -euo pipefail
 
@@ -82,7 +83,21 @@ jobs:
             sudo apache2ctl configtest
             sudo systemctl reload apache2
 
-            echo "==> Health"
-            curl -fsS http://127.0.0.1:4010/api/health; echo
-            curl -fsS -H 'Host: lab.athariqbal.com' http://127.0.0.1/api/health; echo
+            echo "==> Health (wait for API boot)"
+            ok=0
+            for i in $(seq 1 30); do
+              if curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:4010/api/health; then
+                echo
+                ok=1
+                break
+              fi
+              echo "API not ready yet (attempt $i/30)..."
+              sleep 2
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::API health check failed after waiting"
+              docker compose --project-directory "$APP_DIR" -f "$APP_DIR/docker-compose.yml" logs --tail=100 api || true
+              exit 1
+            fi
+            curl -fsS --connect-timeout 2 --max-time 5 -H 'Host: lab.athariqbal.com' http://127.0.0.1/api/health; echo
             echo "==> Public: https://lab.athariqbal.com (after DNS A → server + certbot)"
